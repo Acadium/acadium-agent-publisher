@@ -39,6 +39,12 @@ final class Agent_Publisher_Abilities {
 	}
 
 	/**
+	 * Annotations are hints for clients, but core's Abilities REST API also
+	 * derives the HTTP method from them: readonly → GET, destructive AND
+	 * idempotent → DELETE (input only from the query string), otherwise POST.
+	 * Write abilities therefore never combine destructive with idempotent,
+	 * so they all take a JSON body via POST.
+	 *
 	 * Exposure flags. `public` is the WordPress 7.1+ switch (it also seeds
 	 * show_in_rest); `mcp.public` and `show_in_rest` make the same intent
 	 * explicit on 6.9 / 7.0 and for the MCP Adapter.
@@ -179,7 +185,7 @@ final class Agent_Publisher_Abilities {
 
 		wp_register_ability( 'agent-publisher/create-draft-post', array(
 			'label'               => __( 'Create a draft post', 'acadium-agent-publisher' ),
-			'description'         => 'Creates a new post as a DRAFT (never published) for a human to review and publish in WordPress. Returns the post ID and an edit URL to share with the reviewer.',
+			'description'         => 'Creates a new post as a DRAFT. Nothing is published by this call. Afterwards, depending on the site\'s mode (see agent-publisher/get-capabilities), either share the returned edit URL with a human reviewer, call submit-for-review, or call publish-post.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -200,7 +206,7 @@ final class Agent_Publisher_Abilities {
 
 		wp_register_ability( 'agent-publisher/update-draft-post', array(
 			'label'               => __( 'Update a draft post', 'acadium-agent-publisher' ),
-			'description'         => 'Changes fields of a post that is still a draft or pending review. Only the fields you pass are changed. Published and scheduled posts are refused: ask a human to revert them to draft first.',
+			'description'         => 'Changes fields of a post that is still a draft or pending review. Only the fields you pass are changed. Published and scheduled posts are refused: use update-published-post if the site allows it, or unpublish-post first.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -215,7 +221,100 @@ final class Agent_Publisher_Abilities {
 			'permission_callback' => function ( $input ) {
 				return self::can_edit( $input['id'] ?? 0 );
 			},
-			'meta'                => self::meta( false, true, true ),
+			'meta'                => self::meta( false, true, false ),
+		) );
+
+		$id_only = array(
+			'type'                 => 'object',
+			'properties'           => array( 'id' => array( 'type' => 'integer', 'description' => 'Post ID.' ) ),
+			'required'             => array( 'id' ),
+			'additionalProperties' => false,
+		);
+		$publish_output = array(
+			'type'       => 'object',
+			'properties' => array_merge( $post_output['properties'], array(
+				'link' => array( 'type' => 'string', 'description' => 'Public URL (for scheduled posts, live from the scheduled time).' ),
+				'date' => array( 'type' => 'string', 'description' => 'Publication date (site time, ISO 8601).' ),
+			) ),
+		);
+
+		wp_register_ability( 'agent-publisher/submit-for-review', array(
+			'label'               => __( 'Submit a draft for review', 'acadium-agent-publisher' ),
+			'description'         => 'Moves one of your drafts to "Pending review" so a site editor can review and publish it. Only when the site mode allows review (see agent-publisher/get-capabilities).',
+			'category'            => self::CATEGORY,
+			'input_schema'        => $id_only,
+			'output_schema'       => $post_output,
+			'execute_callback'    => array( __CLASS__, 'submit_for_review' ),
+			'permission_callback' => function ( $input ) {
+				if ( ! Agent_Publisher_Policy::allows( 'review' ) ) {
+					return Agent_Publisher_Policy::not_allowed( 'submit posts for review', 'review' );
+				}
+				return self::can_manage( $input['id'] ?? 0 );
+			},
+			'meta'                => self::meta( false, false, true ),
+		) );
+
+		wp_register_ability( 'agent-publisher/publish-post', array(
+			'label'               => __( 'Publish or schedule a post', 'acadium-agent-publisher' ),
+			'description'         => 'Publishes one of your drafts (or pending/scheduled posts) now, or schedules it when you pass a future date. Publishing is visible to site visitors and may notify subscribers or social channels, so confirm with the user first. The site\'s pre-publish checks run first (see agent-publisher/get-capabilities); if any fail, nothing changes and the error says what to fix. Only when the site mode allows publishing.',
+			'category'            => self::CATEGORY,
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'   => array( 'type' => 'integer', 'description' => 'Post ID.' ),
+					'date' => array( 'type' => 'string', 'description' => 'Optional future publication time, ISO 8601 (e.g. 2026-10-01T09:00:00-04:00; without an offset the site\'s timezone is used). Omit to publish now.' ),
+				),
+				'required'             => array( 'id' ),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => $publish_output,
+			'execute_callback'    => array( __CLASS__, 'publish_post' ),
+			'permission_callback' => function ( $input ) {
+				if ( ! Agent_Publisher_Policy::allows( 'publish' ) ) {
+					return Agent_Publisher_Policy::not_allowed( 'publish posts', 'publish' );
+				}
+				return self::can_manage( $input['id'] ?? 0 );
+			},
+			'meta'                => self::meta( false, true, false ),
+		) );
+
+		wp_register_ability( 'agent-publisher/unpublish-post', array(
+			'label'               => __( 'Unpublish a post', 'acadium-agent-publisher' ),
+			'description'         => 'Takes one of your published or scheduled posts offline by switching it back to draft (content is kept; it can be published again). Use it to undo a publish. Only when the site mode allows publishing.',
+			'category'            => self::CATEGORY,
+			'input_schema'        => $id_only,
+			'output_schema'       => $post_output,
+			'execute_callback'    => array( __CLASS__, 'unpublish_post' ),
+			'permission_callback' => function ( $input ) {
+				if ( ! Agent_Publisher_Policy::allows( 'publish' ) ) {
+					return Agent_Publisher_Policy::not_allowed( 'unpublish posts', 'publish' );
+				}
+				return self::can_manage( $input['id'] ?? 0 );
+			},
+			'meta'                => self::meta( false, true, false ),
+		) );
+
+		wp_register_ability( 'agent-publisher/update-published-post', array(
+			'label'               => __( 'Update a published post', 'acadium-agent-publisher' ),
+			'description'         => 'Changes fields of one of your posts that is already live. Only the fields you pass are changed, and visitors see the change immediately, so confirm with the user first. Only when the site mode is "Publish and edit live posts".',
+			'category'            => self::CATEGORY,
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array_merge( array(
+					'id' => array( 'type' => 'integer', 'description' => 'ID of the published post to change.' ),
+				), $post_fields ),
+				'required'             => array( 'id' ),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => $publish_output,
+			'execute_callback'    => array( __CLASS__, 'update_published' ),
+			'permission_callback' => function ( $input ) {
+				if ( ! Agent_Publisher_Policy::allows( 'publish_edit' ) ) {
+					return Agent_Publisher_Policy::not_allowed( 'edit published posts', 'publish_edit' );
+				}
+				return self::can_manage( $input['id'] ?? 0 );
+			},
+			'meta'                => self::meta( false, true, false ),
 		) );
 
 		wp_register_ability( 'agent-publisher/upload-media', array(
@@ -280,7 +379,34 @@ final class Agent_Publisher_Abilities {
 		if ( ! $post || ! in_array( $post->post_type, self::post_types(), true ) ) {
 			return new WP_Error( 'agent_publisher_not_found', 'No such post.', array( 'status' => 404 ) );
 		}
-		return current_user_can( 'edit_post', $post->ID );
+		if ( current_user_can( 'edit_post', $post->ID ) ) {
+			return true;
+		}
+		if ( in_array( $post->post_status, array( 'publish', 'future' ), true ) && (int) $post->post_author === get_current_user_id() ) {
+			return new WP_Error(
+				'agent_publisher_not_a_draft',
+				sprintf( 'Post %d is "%s". Use update-published-post (if the site allows it) or unpublish-post first; see agent-publisher/get-capabilities.', $post->ID, $post->post_status ),
+				array( 'status' => 409 )
+			);
+		}
+		return false;
+	}
+
+	/**
+	 * The post exists, is a supported type, and is the current user's (or the
+	 * user may edit others' posts). Used for status changes: the agent role
+	 * has no capability for published posts, so ownership is checked here and
+	 * the site mode by each ability.
+	 */
+	private static function can_manage( $id ) {
+		$post = get_post( (int) $id );
+		if ( ! $post || ! in_array( $post->post_type, self::post_types(), true ) ) {
+			return new WP_Error( 'agent_publisher_not_found', 'No such post.', array( 'status' => 404 ) );
+		}
+		if ( (int) $post->post_author === get_current_user_id() || current_user_can( 'edit_others_posts' ) ) {
+			return true;
+		}
+		return new WP_Error( 'agent_publisher_not_yours', 'You can only change your own posts.', array( 'status' => 403 ) );
 	}
 
 	/* ------------------------------------------------------------------ */
@@ -384,6 +510,7 @@ final class Agent_Publisher_Abilities {
 			return $id;
 		}
 		self::save_extras( $id, $input );
+		Agent_Publisher_Policy::log( 'create', $id );
 		return self::summary( get_post( $id ) );
 	}
 
@@ -410,7 +537,109 @@ final class Agent_Publisher_Abilities {
 			}
 		}
 		self::save_extras( $post->ID, $input );
+		Agent_Publisher_Policy::log( 'update', $post->ID );
 		return self::summary( get_post( $post->ID ) );
+	}
+
+	public static function submit_for_review( $input ) {
+		$post = get_post( (int) $input['id'] );
+		if ( 'pending' === $post->post_status ) {
+			return self::summary( $post );
+		}
+		if ( ! in_array( $post->post_status, array( 'draft', 'auto-draft' ), true ) ) {
+			return new WP_Error( 'agent_publisher_not_a_draft', sprintf( 'Post %d is "%s"; only drafts can be submitted for review.', $post->ID, $post->post_status ), array( 'status' => 409 ) );
+		}
+		$id = wp_update_post( array( 'ID' => $post->ID, 'post_status' => 'pending' ), true );
+		if ( is_wp_error( $id ) ) {
+			return $id;
+		}
+		Agent_Publisher_Policy::log( 'submit', $post->ID );
+		return self::summary( get_post( $post->ID ) );
+	}
+
+	public static function publish_post( $input ) {
+		$post = get_post( (int) $input['id'] );
+		if ( 'publish' === $post->post_status ) {
+			return new WP_Error( 'agent_publisher_already_published', sprintf( 'Post %d is already published: %s', $post->ID, get_permalink( $post ) ), array( 'status' => 409 ) );
+		}
+		if ( ! in_array( $post->post_status, array( 'draft', 'pending', 'auto-draft', 'future' ), true ) ) {
+			return new WP_Error( 'agent_publisher_bad_status', sprintf( 'Post %d is "%s" and cannot be published by an agent.', $post->ID, $post->post_status ), array( 'status' => 409 ) );
+		}
+
+		$postarr = array( 'ID' => $post->ID, 'post_status' => 'publish', 'edit_date' => true );
+		if ( ! empty( $input['date'] ) ) {
+			$dates = rest_get_date_with_gmt( $input['date'] );
+			if ( ! $dates ) {
+				return new WP_Error( 'agent_publisher_bad_date', 'date must be ISO 8601, e.g. 2026-10-01T09:00:00-04:00.', array( 'status' => 400 ) );
+			}
+			if ( strtotime( $dates[1] . ' UTC' ) <= time() + MINUTE_IN_SECONDS ) {
+				return new WP_Error( 'agent_publisher_past_date', 'date must be in the future. Omit it to publish now.', array( 'status' => 400 ) );
+			}
+			$postarr['post_date']     = $dates[0];
+			$postarr['post_date_gmt'] = $dates[1];
+		} else {
+			$postarr['post_date']     = current_time( 'mysql' );
+			$postarr['post_date_gmt'] = current_time( 'mysql', true );
+		}
+
+		// Rescheduling an already scheduled post doesn't count toward the daily limit again.
+		$checks = Agent_Publisher_Policy::check_publishable( $post, 'future' !== $post->post_status );
+		if ( is_wp_error( $checks ) ) {
+			return $checks;
+		}
+
+		$id = wp_update_post( $postarr, true );
+		if ( is_wp_error( $id ) ) {
+			return $id;
+		}
+		$post = get_post( $post->ID );
+		Agent_Publisher_Policy::log( 'future' === $post->post_status ? 'schedule' : 'publish', $post->ID, 'future' === $post->post_status ? $post->post_date : '' );
+		return self::published_summary( $post );
+	}
+
+	public static function unpublish_post( $input ) {
+		$post = get_post( (int) $input['id'] );
+		if ( ! in_array( $post->post_status, array( 'publish', 'future' ), true ) ) {
+			return new WP_Error( 'agent_publisher_not_published', sprintf( 'Post %d is "%s", not published or scheduled.', $post->ID, $post->post_status ), array( 'status' => 409 ) );
+		}
+		$id = wp_update_post( array( 'ID' => $post->ID, 'post_status' => 'draft' ), true );
+		if ( is_wp_error( $id ) ) {
+			return $id;
+		}
+		Agent_Publisher_Policy::log( 'unpublish', $post->ID );
+		return self::summary( get_post( $post->ID ) );
+	}
+
+	public static function update_published( $input ) {
+		$post = get_post( (int) $input['id'] );
+		if ( 'publish' !== $post->post_status ) {
+			return new WP_Error( 'agent_publisher_not_published', sprintf( 'Post %d is "%s"; use update-draft-post for unpublished posts.', $post->ID, $post->post_status ), array( 'status' => 409 ) );
+		}
+		if ( ( isset( $input['title'] ) && '' === trim( $input['title'] ) ) || ( isset( $input['content'] ) && '' === trim( wp_strip_all_tags( $input['content'] ) ) ) ) {
+			return new WP_Error( 'agent_publisher_empty', 'A published post cannot have an empty title or content.', array( 'status' => 400 ) );
+		}
+		$valid = self::validate_extras( $input );
+		if ( is_wp_error( $valid ) ) {
+			return $valid;
+		}
+		$allowed = Agent_Publisher_Policy::settings()['allowed_categories'];
+		if ( $allowed && isset( $input['categories'] ) && ( ! $input['categories'] || array_diff( array_map( 'intval', $input['categories'] ), $allowed ) ) ) {
+			return new WP_Error( 'agent_publisher_checks_failed', 'Agents may only use these category IDs on published posts: ' . implode( ', ', $allowed ) . '.', array( 'status' => 422 ) );
+		}
+
+		$postarr       = self::postarr( $input );
+		$postarr['ID'] = $post->ID;
+		if ( count( $postarr ) > 1 ) {
+			$id = wp_update_post( wp_slash( $postarr ), true );
+			if ( is_wp_error( $id ) ) {
+				return $id;
+			}
+		}
+		self::save_extras( $post->ID, $input );
+		if ( count( $postarr ) > 1 || array_intersect_key( $input, array_flip( array( 'categories', 'tags', 'featured_media', 'meta' ) ) ) ) {
+			Agent_Publisher_Policy::log( 'update_published', $post->ID );
+		}
+		return self::published_summary( get_post( $post->ID ) );
 	}
 
 	public static function upload_media( $input ) {
@@ -491,6 +720,8 @@ final class Agent_Publisher_Abilities {
 			set_post_thumbnail( $post_id, $id );
 		}
 
+		Agent_Publisher_Policy::log( 'upload', $post_id, wp_get_attachment_url( $id ) );
+
 		$src = wp_get_attachment_image_src( $id, 'full' );
 		return array(
 			'id'     => (int) $id,
@@ -559,6 +790,13 @@ final class Agent_Publisher_Abilities {
 				}
 			}
 		}
+	}
+
+	private static function published_summary( $post ) {
+		return self::summary( $post ) + array(
+			'link' => get_permalink( $post ),
+			'date' => ( $dt = get_post_datetime( $post ) ) ? $dt->format( 'c' ) : '',
+		);
 	}
 
 	private static function summary( $post ) {
