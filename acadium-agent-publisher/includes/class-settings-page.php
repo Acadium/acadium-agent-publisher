@@ -157,9 +157,65 @@ final class Agent_Publisher_Settings_Page {
 				<?php submit_button(); ?>
 			</form>
 
+			<?php self::render_connections( $s ); ?>
 			<?php self::render_status(); ?>
 			<?php self::render_activity(); ?>
 		</div>
+		<?php
+	}
+
+	private static function render_connections( array $s ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only flag after a nonce-checked redirect.
+		if ( isset( $_GET['agent-publisher-revoked'] ) ) {
+			echo '<div class="notice notice-success inline"><p>' . esc_html__( 'Connection removed. The app can no longer access this site.', 'acadium-agent-publisher' ) . '</p></div>';
+		}
+		$grants = Agent_Publisher_OAuth_Store::grants();
+		if ( ! $s['oauth_enabled'] && ! $grants ) {
+			return;
+		}
+		$format = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+		?>
+		<h2><?php esc_html_e( 'Connected apps', 'acadium-agent-publisher' ); ?></h2>
+		<?php if ( ! $s['oauth_enabled'] && $grants ) : ?>
+			<p class="description"><?php esc_html_e( 'OAuth connections are turned off, so these apps cannot access the site until you turn them back on.', 'acadium-agent-publisher' ); ?></p>
+		<?php endif; ?>
+		<?php if ( ! $grants ) : ?>
+			<p><?php esc_html_e( 'No apps connected yet. In claude.ai, open Settings > Connectors > Add custom connector and enter the connector URL above.', 'acadium-agent-publisher' ); ?></p>
+			<?php return; ?>
+		<?php endif; ?>
+		<table class="widefat striped" style="max-width:60em;">
+			<thead>
+				<tr>
+					<th><?php esc_html_e( 'App', 'acadium-agent-publisher' ); ?></th>
+					<th><?php esc_html_e( 'Acts as', 'acadium-agent-publisher' ); ?></th>
+					<th><?php esc_html_e( 'Approved', 'acadium-agent-publisher' ); ?></th>
+					<th><?php esc_html_e( 'Last used', 'acadium-agent-publisher' ); ?></th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+				<?php foreach ( $grants as $g ) : ?>
+					<?php $user = get_userdata( (int) $g['user_id'] ); ?>
+					<tr>
+						<td>
+							<?php echo esc_html( $g['client_name'] ); ?>
+							<br /><span class="description"><?php echo esc_html( (string) wp_parse_url( $g['redirect'], PHP_URL_HOST ) ); ?></span>
+						</td>
+						<td><?php echo esc_html( $user ? $user->display_name : '#' . (int) $g['user_id'] ); ?></td>
+						<td><?php echo esc_html( wp_date( $format, strtotime( $g['created'] . ' UTC' ) ) ); ?></td>
+						<td><?php echo esc_html( $g['last_used'] ? wp_date( $format, strtotime( $g['last_used'] . ' UTC' ) ) : '—' ); ?></td>
+						<td>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+								<input type="hidden" name="action" value="agent_publisher_revoke_grant" />
+								<input type="hidden" name="grant" value="<?php echo esc_attr( $g['grant_id'] ); ?>" />
+								<?php wp_nonce_field( 'agent_publisher_revoke_' . $g['grant_id'] ); ?>
+								<button type="submit" class="button"><?php esc_html_e( 'Disconnect', 'acadium-agent-publisher' ); ?></button>
+							</form>
+						</td>
+					</tr>
+				<?php endforeach; ?>
+			</tbody>
+		</table>
 		<?php
 	}
 

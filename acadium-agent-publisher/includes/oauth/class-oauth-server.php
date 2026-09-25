@@ -30,10 +30,91 @@ final class Agent_Publisher_OAuth_Server {
 
 	const PREFIX = 'agent-publisher-oauth';
 
+	/** Set when a request carried a bearer token that was not accepted. */
+	private static $invalid_token = false;
+
 	public static function init() {
 		add_action( 'plugins_loaded', array( 'Agent_Publisher_OAuth_Store', 'maybe_install' ) );
 		add_action( 'parse_request', array( __CLASS__, 'route' ), 0 );
 		add_action( 'deleted_user', array( 'Agent_Publisher_OAuth_Store', 'revoke_user' ) );
+		add_filter( 'determine_current_user', array( __CLASS__, 'bearer_user' ), 30 );
+		add_filter( 'rest_post_dispatch', array( __CLASS__, 'challenge' ), 10, 3 );
+		add_action( 'admin_post_agent_publisher_revoke_grant', array( __CLASS__, 'admin_revoke_grant' ) );
+	}
+
+	/* ------------------------------------------------------------------ */
+	/* Using tokens                                                        */
+	/* ------------------------------------------------------------------ */
+
+	/**
+	 * determine_current_user: a valid access token logs the request in as its
+	 * AI Agent user, but only for the MCP and Abilities REST routes.
+	 */
+	public static function bearer_user( $user_id ) {
+		if ( $user_id || ! self::enabled() ) {
+			return $user_id;
+		}
+		$header = self::authorization_header();
+		if ( 0 !== stripos( $header, 'Bearer ' ) || ! self::is_protected_request() ) {
+			return $user_id;
+		}
+		$token_user = Agent_Publisher_OAuth_Store::user_for_access_token( trim( substr( $header, 7 ) ) );
+		$user       = $token_user ? get_userdata( $token_user ) : false;
+		if ( $user && in_array( Agent_Publisher_Policy::ROLE, (array) $user->roles, true ) ) {
+			return $user->ID;
+		}
+		self::$invalid_token = true;
+		return $user_id;
+	}
+
+	/** Is this a REST request to the MCP Adapter or the Abilities API? */
+	private static function is_protected_request() {
+		$routes = array( '/mcp/', '/wp-abilities/' );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check.
+		$route = isset( $_GET['rest_route'] ) ? sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ) : '';
+		if ( '' === $route && isset( $_SERVER['REQUEST_URI'] ) ) {
+			$path   = (string) wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH );
+			$prefix = '/' . trim( rest_get_url_prefix(), '/' );
+			$pos    = strpos( $path, $prefix . '/' );
+			$route  = false === $pos ? '' : substr( $path, $pos + strlen( $prefix ) );
+		}
+		foreach ( $routes as $r ) {
+			if ( 0 === strpos( $route, $r ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 401s from the MCP endpoint tell the client where to authorize
+	 * (RFC 9728 section 5.1), which is how claude.ai discovers this server.
+	 */
+	public static function challenge( $response, $server, $request ) {
+		if ( ! self::enabled() || ! $response instanceof WP_REST_Response || 401 !== $response->get_status() ) {
+			return $response;
+		}
+		if ( 0 !== strpos( $request->get_route(), '/mcp/' ) && 0 !== strpos( $request->get_route(), '/wp-abilities/' ) ) {
+			return $response;
+		}
+		$value = 'Bearer resource_metadata="' . self::resource_metadata_url() . '"';
+		if ( self::$invalid_token ) {
+			$value .= ', error="invalid_token", error_description="The access token is invalid or expired"';
+		}
+		$response->header( 'WWW-Authenticate', $value );
+		return $response;
+	}
+
+	/** Settings page "Disconnect" button. */
+	public static function admin_revoke_grant() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to do that.', 'acadium-agent-publisher' ), 403 );
+		}
+		$grant = isset( $_POST['grant'] ) ? sanitize_key( wp_unslash( $_POST['grant'] ) ) : '';
+		check_admin_referer( 'agent_publisher_revoke_' . $grant );
+		Agent_Publisher_OAuth_Store::revoke_grant( $grant );
+		wp_safe_redirect( add_query_arg( 'agent-publisher-revoked', '1', admin_url( 'options-general.php?page=' . Agent_Publisher_Settings_Page::SLUG ) ) );
+		exit;
 	}
 
 	public static function enabled() {
