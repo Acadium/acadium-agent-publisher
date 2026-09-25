@@ -1,27 +1,55 @@
 # Acadium Agent Publisher
 
-Let Claude and other AI agents draft posts, upload images and look up categories and tags on a WordPress site, as a **drafts-only** user you control.
+Let Claude and other AI agents draft, review and publish posts on a WordPress site, upload images and look up categories and tags, **within rules the site owner sets**.
 
-Acadium Agent Publisher registers five abilities with the WordPress **Abilities API** (core since 6.9). The [MCP Adapter](https://github.com/WordPress/mcp-adapter) plugin exposes them to MCP clients such as Claude Desktop and Claude Code:
+Acadium Agent Publisher registers abilities with the WordPress **Abilities API** (core since 6.9). The [MCP Adapter](https://github.com/WordPress/mcp-adapter) plugin exposes them to MCP clients such as Claude Desktop and Claude Code.
 
-| Ability | Kind | What it does |
-|---|---|---|
-| `agent-publisher/list-terms` | read | List categories or tags (id, name, slug, parent, count) |
-| `agent-publisher/get-post` | read | Read a post the agent can edit: raw HTML, excerpt, terms, featured image, allowed custom fields |
-| `agent-publisher/create-draft-post` | write | Create a post as a **draft**, returning an edit URL for a human reviewer |
-| `agent-publisher/update-draft-post` | write | Change fields of a post that is still a draft; published posts are refused |
-| `agent-publisher/upload-media` | write | Add an image from a public https URL or base64, with alt text; optionally make it a draft's featured image |
+## Publishing modes
+
+Choose under **Settings > Agent Publisher**:
+
+| Mode | The agent can… |
+|---|---|
+| **Drafts only** (default) | create and edit its own drafts; a person publishes them |
+| **Submit for review** | also move its drafts to *Pending review* for an editor |
+| **Publish** | also publish or schedule its own posts (after the checks below) and unpublish them |
+| **Publish and edit live posts** | also change its own posts after they are live |
+
+**Pre-publish checks:**
+- a title and content are always required
+- optional: a featured image with alt text
+- optional: allowed categories
+- optional: a daily limit
+
+The settings page also shows setup status (agent users, HTTPS, Application Passwords, MCP Adapter) and recent agent activity.
+
+## Abilities
+
+| Ability | Kind | What it does | Mode needed |
+|---|---|---|---|
+| `agent-publisher/get-capabilities` | read | The site's mode, allowed actions and checks. Agents call this first | any |
+| `agent-publisher/list-terms` | read | List categories or tags (id, name, slug, parent, count) | any |
+| `agent-publisher/get-post` | read | Read one of the agent's posts: raw HTML, excerpt, terms, featured image, allowed custom fields | any |
+| `agent-publisher/create-draft-post` | write | Create a post as a **draft**, returning an edit URL | any |
+| `agent-publisher/update-draft-post` | write | Change a draft or pending post | any |
+| `agent-publisher/upload-media` | write | Add an image from a public https URL or base64, with alt text; optionally a draft's featured image | any |
+| `agent-publisher/submit-for-review` | write | Draft → *Pending review* | Submit for review |
+| `agent-publisher/publish-post` | write | Publish now, or schedule with a future `date` (ISO 8601) | Publish |
+| `agent-publisher/unpublish-post` | write | Published or scheduled → draft (undo) | Publish |
+| `agent-publisher/update-published-post` | write | Change a live post | Publish and edit live posts |
 
 ## Safety model
 
-The agent signs in as its own WordPress user with an **Application Password**. An Application Password works for the whole REST API, not only for these abilities, so the limits are enforced by the user's **role**. The plugin adds the role **AI Agent (drafts only)** (`agent_publisher_agent`) with only `read`, `edit_posts`, `delete_posts` and `upload_files`:
+The agent signs in as its own WordPress user with an **Application Password**. An Application Password works for the whole REST API, not only for these abilities, so the **AI Agent** role (`agent_publisher_agent`) has only `read`, `edit_posts`, `delete_posts` and `upload_files`, **in every mode**:
 
-- It cannot publish, schedule, or edit or delete published posts, including through the core REST API.
-- It cannot edit other users' posts.
+- **The core REST API never lets the agent publish, schedule, or edit or delete live posts.** Only this plugin's abilities do that, after checking the mode, the pre-publish checks and the daily limit, and they record every action in the activity log.
+- It can only change its own posts.
 - It has no `unfiltered_html`, so WordPress strips scripts, iframes and event handlers from what it writes.
 - Custom fields are writable only if the site allow-lists them.
 - Uploads are checked by their real content type (JPEG, PNG, GIF, WebP by default), capped at 10 MB, and URL uploads refuse private and local addresses.
 - References such as category IDs and featured images are validated before anything is written.
+
+Publishing can trigger things unpublishing can't undo, such as subscriber emails or social posts from other plugins. Start with *Drafts only*.
 
 ## Requirements
 
@@ -33,7 +61,7 @@ The agent signs in as its own WordPress user with an **Application Password**. A
 
 1. **Install Acadium Agent Publisher.** Upload `dist/acadium-agent-publisher.zip` under Plugins > Add New > Upload Plugin, then activate it.
 2. **Install the MCP Adapter.** Download `mcp-adapter.zip` from its [releases](https://github.com/WordPress/mcp-adapter/releases), upload it the same way, and activate it.
-3. **Create the agent user.** Under Users > Add New User, create e.g. `claude` with the role **AI Agent (drafts only)**. Never use Author, Editor or Administrator.
+3. **Create the agent user.** Under Users > Add New User, create e.g. `claude` with the role **AI Agent**. Never use Author, Editor or Administrator.
    ```bash
    wp user create claude claude@example.com --role=agent_publisher_agent --display_name=Claude --user_pass="$(openssl rand -hex 24)"
    ```
@@ -41,7 +69,8 @@ The agent signs in as its own WordPress user with an **Application Password**. A
    ```bash
    wp user application-password create claude "Claude Desktop" --porcelain
    ```
-5. **Connect Claude.** You need Node.js 18+ for the local bridge [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote).
+5. **Choose what the agent may do** under Settings > Agent Publisher (default: Drafts only).
+6. **Connect Claude.** You need Node.js 18+ for the local bridge [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote).
 
    **Claude Desktop:** go to Settings > Developer > Edit Config, add the following, and restart:
    ```json
@@ -68,9 +97,9 @@ The agent signs in as its own WordPress user with an **Application Password**. A
      -- npx -y @automattic/mcp-wordpress-remote@latest
    ```
    claude.ai (web and mobile) custom connectors need OAuth, which isn't supported yet.
-6. **Test it.** Ask Claude: *"List the categories on my WordPress site, then create a short draft titled 'Connection test' in the first one and give me the edit link."* The draft appears under Posts > Drafts.
+7. **Test it.** Ask Claude: *"List the categories on my WordPress site, then create a short draft titled 'Connection test' in the first one and give me the edit link."* The draft appears under Posts > Drafts.
 
-Without MCP, the same abilities are available through the core REST API. Read-only abilities use GET, and the others use POST with `{"input": {...}}`:
+Without MCP, the same abilities are available through the core REST API. Read-only abilities use GET (input as query parameters), and all others use POST with a JSON body `{"input": {...}}`:
 ```bash
 curl -u 'claude:APP PASSWORD' https://YOUR-SITE/wp-json/wp-abilities/v1/abilities/agent-publisher/list-terms/run?input%5Blimit%5D=5
 ```
@@ -101,8 +130,11 @@ add_filter( 'agent_publisher_post_meta', function ( $keys ) {
 | 401/403 on all of `/wp-json/` | A "disable REST API" plugin or host rule is blocking it; allow logged-in users |
 | An HTML "403 Forbidden" page | A WAF is blocking it (Cloudflare, Sucuri, ModSecurity…); allow authenticated `POST /wp-json/mcp/*` and larger bodies |
 | Only 3 `core/*` abilities visible | Activate Acadium Agent Publisher; WordPress must be 6.9+ |
-| "Permission denied" | Give the agent user the **AI Agent (drafts only)** role |
-| "Only drafts can be changed" | By design: switch the post back to Draft to let the agent revise it |
+| "Permission denied" | Give the agent user the **AI Agent** role; agents can only change their own posts |
+| "This site does not let agents …" | The action needs a higher mode under Settings > Agent Publisher |
+| "Cannot publish: …" | A pre-publish check failed; the message says what to fix (nothing was changed) |
+| "Only drafts can be changed" | Use `update-published-post` (mode *Publish and edit live posts*) or `unpublish-post` first |
+| Scheduled posts don't go live | WordPress publishes them via WP-Cron; if it's disabled, run it from a server cron job |
 
 ## Revoking access
 
