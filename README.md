@@ -83,6 +83,8 @@ It's off until you enable **Allow OAuth connections**. It follows the [MCP autho
 
 ## Setup (about 15 minutes)
 
+> **Starting without a WordPress site?** [`docker/`](docker/) has a Docker Compose setup (WordPress + MariaDB behind your reverse proxy) and a step-by-step guide from an empty server to Claude publishing.
+
 1. **Install Acadium Agent Publisher.** Upload `dist/acadium-agent-publisher.zip` under Plugins > Add New > Upload Plugin, then activate it.
 2. **Install the MCP Adapter.** Download `mcp-adapter.zip` from its [releases](https://github.com/WordPress/mcp-adapter/releases), upload it the same way, and activate it.
 3. **Create the agent user.** Under Users > Add New User, create e.g. `claude` with the role **AI Agent**. Never use Author, Editor or Administrator.
