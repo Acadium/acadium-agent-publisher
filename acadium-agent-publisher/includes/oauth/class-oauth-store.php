@@ -222,13 +222,13 @@ final class Agent_Publisher_OAuth_Store {
 	/* Grants and tokens                                                   */
 	/* ------------------------------------------------------------------ */
 
-	public static function create_grant( $client_id, $user_id, $resource ) {
+	public static function create_grant( $client_id, $user_id, $resource, $approved_by ) {
 		$grant_id = self::random( 16 );
 		self::insert( 'grant', $grant_id, array(
 			'client_id' => $client_id,
 			'grant_id'  => $grant_id,
 			'user_id'   => $user_id,
-			'data'      => array( 'resource' => $resource, 'approved_by' => get_current_user_id() ),
+			'data'      => array( 'resource' => $resource, 'approved_by' => (int) $approved_by ),
 		) );
 		return $grant_id;
 	}
