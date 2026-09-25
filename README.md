@@ -8,6 +8,169 @@ Acadium Agent Publisher registers abilities with the WordPress **Abilities API**
 - **claude.ai on the web, desktop and the Claude mobile apps:** add the site as a custom connector, with the optional built-in OAuth. There's nothing to install on a computer.
 - **Claude Desktop / Claude Code:** use an Application Password.
 
+## Getting started
+
+This guide uses only the **WordPress admin** (`https://your-site/wp-admin`) and takes about 15 minutes. You'll install two plugins, create a user for Claude, and connect Claude.
+
+**Before you start, you need:**
+- A WordPress site, version **6.9 or later** (Dashboard → Updates shows your version).
+- The site served over **HTTPS**: its address starts with `https://`.
+- An **administrator** login for the site.
+- Only for Claude Desktop / Claude Code (step 8, Option B): [Node.js](https://nodejs.org) 18 or later on your computer.
+
+> Setting up a brand-new server? [`docker/`](docker/) runs WordPress with Docker Compose behind a reverse proxy and walks you through it. Then come back here.
+
+### Step 1: Check your site uses HTTPS
+
+1. Go to **Settings → General**.
+2. Check that **WordPress Address (URL)** and **Site Address (URL)** both start with `https://`.
+
+If they start with `http://`, fix HTTPS first. The steps below won't work without it. Behind a reverse proxy? See the [reverse proxy note](docker/README.md#12-point-your-reverse-proxy-at-port-8080).
+
+### Step 2: Turn on pretty permalinks
+
+1. Go to **Settings → Permalinks**.
+2. Under *Permalink structure*, select **Post name**.
+3. Click **Save Changes**.
+
+### Step 3: Install the MCP Adapter plugin
+
+The MCP Adapter, from the WordPress project, is how Claude talks to your site. It isn't in the WordPress plugin directory yet, so you upload it.
+
+1. Download **[mcp-adapter.zip](https://github.com/WordPress/mcp-adapter/releases/download/v0.6.1/mcp-adapter.zip)** (version 0.6.1; newer ones are on its [releases page](https://github.com/WordPress/mcp-adapter/releases)).
+2. In WordPress, go to **Plugins → Add Plugin** ("Add New Plugin" in older versions).
+3. Click **Upload Plugin** at the top, then **Choose File**, and pick `mcp-adapter.zip`.
+4. Click **Install Now**, then **Activate Plugin**.
+
+> **Mac + Safari:** Safari unzips downloads automatically, and WordPress needs the `.zip`. Download with another browser, or turn off Safari → Settings → General → *Open "safe" files after downloading*.
+
+### Step 4: Install Acadium Agent Publisher
+
+1. Download **[acadium-agent-publisher.zip](https://github.com/Acadium/acadium-agent-publisher/raw/v1.2.0/dist/acadium-agent-publisher.zip)** (version 1.2.0).
+2. Go to **Plugins → Add Plugin → Upload Plugin**, choose the file, click **Install Now**, then **Activate Plugin**.
+
+Activating it adds a user role called **AI Agent** and a settings page under **Settings → Agent Publisher**.
+
+### Step 5: Create a user for Claude
+
+Claude signs in as its own WordPress user, so everything it does is labelled and limited.
+
+1. Go to **Users → Add User** ("Add New User" in older versions).
+2. Fill in:
+   - **Username:** `claude`
+   - **Email:** any address you control (e.g. `claude@your-domain.com`). WordPress requires one, but it's never used to log in.
+   - **First / Last Name:** optional (e.g. *Claude*).
+   - **Password:** leave the generated one. Claude never uses it.
+   - **Send User Notification:** untick *Send the new user an email about their account*.
+   - **Role:** **AI Agent**
+3. Click **Add User**.
+
+> Give this user **only** the **AI Agent** role: never Author, Editor or Administrator. The role is what stops Claude from publishing or changing anything beyond your settings, even if it talks to WordPress directly.
+
+### Step 6: Choose what Claude may do
+
+1. Go to **Settings → Agent Publisher**.
+2. Under **What agents may do**, pick a mode. Start with **Drafts only**; you can change it any time.
+
+   | Mode | Claude can… |
+   |---|---|
+   | **Drafts only** | write and edit drafts; you publish them |
+   | **Submit for review** | also send drafts to *Pending review* |
+   | **Publish** | also publish, schedule and unpublish its own posts |
+   | **Publish and edit live posts** | also change its own posts after they're live |
+
+3. Optional, under **Checks before an agent publishes**: require a featured image, limit which categories Claude may publish in, and set a daily limit.
+4. If you'll use **claude.ai** or the **Claude mobile app** (step 8, Option A), tick **Allow OAuth connections**.
+5. Click **Save Changes**.
+
+Scroll down to **Setup**. It should say **Yes** for *Site uses HTTPS*, *Application Passwords available* and *MCP Adapter plugin active*, and list your `claude` user. If anything says **No**, see [Troubleshooting](#troubleshooting).
+
+### Step 7: Copy your connection URL
+
+Claude connects to this address. Replace `your-site.com` with your domain:
+
+```
+https://your-site.com/wp-json/mcp/mcp-adapter-default-server
+```
+
+If OAuth is on, it's also shown on the settings page as the **Connector URL**.
+
+### Step 8: Connect Claude
+
+Pick **one** option.
+
+#### Option A: claude.ai, including the Claude mobile app (recommended)
+
+Nothing to install and no password to copy. It needs **Allow OAuth connections** from step 6.
+
+1. Open **[claude.ai](https://claude.ai)** in a browser and go to **Settings → Connectors**.
+2. Click **Add custom connector**. Give it a name (e.g. *My blog*) and paste your connection URL from step 7. Click **Add**.
+3. Click **Connect** next to it. Your WordPress login page opens: **log in as an administrator**.
+4. On the approval screen, choose **Claude (claude)** under *Act as* and click **Allow**.
+5. You're back in claude.ai and the connector shows as connected. It now also works in **Claude Desktop** and the **Claude mobile app** (same Claude account).
+
+To use it, turn the connector on for a chat from the chat's tools menu.
+
+> On Claude Team or Enterprise plans, an organization owner may need to add custom connectors in the organization's settings.
+
+#### Option B: Claude Desktop (Application Password)
+
+1. **Create an Application Password in WordPress:**
+   1. Go to **Users → All Users** and click **claude**.
+   2. Scroll to **Application Passwords**. Enter a name in *New Application Password Name* (e.g. *Claude Desktop – my laptop*) and click **Add Application Password**.
+   3. **Copy the password shown** (it looks like `abcd EFGH 1234 ijkl MNOP 5678`). WordPress shows it only once.
+2. **Install [Node.js](https://nodejs.org)** (LTS version) on your computer, if you haven't already.
+3. **In Claude Desktop,** go to **Settings → Developer → Edit Config**. This opens `claude_desktop_config.json`. Replace its contents with the following, putting in your domain and the password from 1.3 (if the file already has other servers, add `"my-wordpress"` inside the existing `"mcpServers"`):
+   ```json
+   {
+     "mcpServers": {
+       "my-wordpress": {
+         "command": "npx",
+         "args": ["-y", "@automattic/mcp-wordpress-remote@latest"],
+         "env": {
+           "WP_API_URL": "https://your-site.com/wp-json/mcp/mcp-adapter-default-server",
+           "WP_API_USERNAME": "claude",
+           "WP_API_PASSWORD": "abcd EFGH 1234 ijkl MNOP 5678"
+         }
+       }
+     }
+   }
+   ```
+4. Save the file, **quit Claude Desktop completely**, and open it again.
+
+#### Option C: Claude Code (Application Password)
+
+Create an Application Password as in Option B, step 1, then run:
+
+```bash
+claude mcp add my-wordpress \
+  -e WP_API_URL=https://your-site.com/wp-json/mcp/mcp-adapter-default-server \
+  -e WP_API_USERNAME=claude \
+  -e 'WP_API_PASSWORD=abcd EFGH 1234 ijkl MNOP 5678' \
+  -- npx -y @automattic/mcp-wordpress-remote@latest
+```
+
+### Step 9: Try it
+
+In a new chat (with the connector turned on), ask:
+
+> Using my WordPress tools, check what you're allowed to do on my site, list the categories, and write a short draft post titled "Hello from Claude". Give me the edit link.
+
+Then in WordPress, open **Posts → Drafts**. The draft is there, with *Claude* as the author. Review it and click **Publish** yourself, or pick a *Publish* mode in step 6 if you want Claude to publish.
+
+### Step 10: Keep an eye on it
+
+Everything is under **Settings → Agent Publisher**:
+
+- **Recent agent activity** lists everything Claude created, updated, published or uploaded.
+- **Connected apps** (OAuth) has a **Disconnect** button for each connection.
+- **Change the mode** any time. Changes apply to Claude's next action.
+- To remove an Application Password, go to **Users → claude → Application Passwords → Revoke**.
+
+---
+
+# Reference
+
 ## Publishing modes
 
 Choose under **Settings > Agent Publisher**:
@@ -82,61 +245,16 @@ It's off until you enable **Allow OAuth connections**. It follows the [MCP autho
 - Behind a reverse proxy (Caddy, nginx, Cloudflare): the proxy must send `X-Forwarded-Proto: https` and pass `Host` and `Authorization` through. Otherwise WordPress redirects in a loop and disables Application Passwords. See the [reverse proxy note](docker/README.md#12-point-your-reverse-proxy-at-port-8080) and [`docker/Caddyfile.example`](docker/Caddyfile.example).
 - For MCP clients: the [MCP Adapter](https://github.com/WordPress/mcp-adapter/releases) plugin (tested with 0.6.1)
 
-## Setup (about 15 minutes)
+## Command line (WP-CLI)
 
-> **Starting without a WordPress site?** [`docker/`](docker/) has a Docker Compose setup (WordPress + MariaDB behind your reverse proxy) and a step-by-step guide from an empty server to Claude publishing.
+Every step above can also be done with WP-CLI. [`docker/README.md`](docker/README.md) lists the commands (install, permalinks, plugins, agent user, settings, Application Password).
 
-1. **Install Acadium Agent Publisher.** Upload `dist/acadium-agent-publisher.zip` under Plugins > Add New > Upload Plugin, then activate it.
-2. **Install the MCP Adapter.** Download `mcp-adapter.zip` from its [releases](https://github.com/WordPress/mcp-adapter/releases), upload it the same way, and activate it.
-3. **Create the agent user.** Under Users > Add New User, create e.g. `claude` with the role **AI Agent**. Never use Author, Editor or Administrator.
-   ```bash
-   wp user create claude claude@example.com --role=agent_publisher_agent --display_name=Claude --user_pass="$(openssl rand -hex 24)"
-   ```
-4. **Create an Application Password.** Edit the user, open Application Passwords, and add one per device (e.g. "Claude Desktop, Jane's laptop"). Copy it; it's shown once.
-   ```bash
-   wp user application-password create claude "Claude Desktop" --porcelain
-   ```
-5. **Choose what the agent may do** under Settings > Agent Publisher (default: Drafts only).
-6. **Connect Claude.** Pick one of the two options below.
+## Using the REST API directly
 
-   **Option A: claude.ai, including the mobile apps (OAuth).** No Application Password or Node.js needed; you can skip step 4.
-   1. Under Settings > Agent Publisher, turn on **Allow OAuth connections** and save.
-   2. In claude.ai, go to **Settings > Connectors > Add custom connector**, name it, and enter `https://YOUR-SITE/wp-json/mcp/mcp-adapter-default-server`.
-   3. Click **Connect**. Log in to WordPress as an **administrator**, choose the AI Agent user, and click **Allow**.
-   4. The connector then works in claude.ai on the web, in Claude Desktop, and in the Claude mobile apps.
+Without MCP, the same abilities are available through the core Abilities REST API. Read-only abilities use GET (input as query parameters); all others use POST with a JSON body `{"input": {...}}`:
 
-   **Option B: Claude Desktop / Claude Code with an Application Password.** You need Node.js 18+ for the local bridge [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote).
-
-   **Claude Desktop:** go to Settings > Developer > Edit Config, add the following, and restart:
-   ```json
-   {
-     "mcpServers": {
-       "my-wordpress": {
-         "command": "npx",
-         "args": ["-y", "@automattic/mcp-wordpress-remote@latest"],
-         "env": {
-           "WP_API_URL": "https://YOUR-SITE/wp-json/mcp/mcp-adapter-default-server",
-           "WP_API_USERNAME": "claude",
-           "WP_API_PASSWORD": "xxxx xxxx xxxx xxxx xxxx xxxx"
-         }
-       }
-     }
-   }
-   ```
-   **Claude Code:**
-   ```bash
-   claude mcp add my-wordpress \
-     -e WP_API_URL=https://YOUR-SITE/wp-json/mcp/mcp-adapter-default-server \
-     -e WP_API_USERNAME=claude \
-     -e 'WP_API_PASSWORD=xxxx xxxx xxxx xxxx xxxx xxxx' \
-     -- npx -y @automattic/mcp-wordpress-remote@latest
-   ```
-   claude.ai (web and mobile) custom connectors need OAuth, which isn't supported yet.
-7. **Test it.** Ask Claude: *"List the categories on my WordPress site, then create a short draft titled 'Connection test' in the first one and give me the edit link."* The draft appears under Posts > Drafts.
-
-Without MCP, the same abilities are available through the core REST API. Read-only abilities use GET (input as query parameters), and all others use POST with a JSON body `{"input": {...}}`:
 ```bash
-curl -u 'claude:APP PASSWORD' https://YOUR-SITE/wp-json/wp-abilities/v1/abilities/agent-publisher/list-terms/run?input%5Blimit%5D=5
+curl -u 'claude:APP PASSWORD' 'https://your-site.com/wp-json/wp-abilities/v1/abilities/agent-publisher/list-terms/run?input%5Blimit%5D=5'
 ```
 
 ## Configuration (filters)
