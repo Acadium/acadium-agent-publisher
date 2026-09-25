@@ -63,6 +63,7 @@ final class Agent_Publisher_Policy {
 			'require_featured_image' => false,
 			'allowed_categories'     => array(),
 			'daily_limit'            => 0,
+			'oauth_enabled'          => false,
 		);
 	}
 
@@ -81,6 +82,7 @@ final class Agent_Publisher_Policy {
 			'require_featured_image' => ! empty( $input['require_featured_image'] ),
 			'allowed_categories'     => $cats,
 			'daily_limit'            => min( 1000, absint( $input['daily_limit'] ?? 0 ) ),
+			'oauth_enabled'          => ! empty( $input['oauth_enabled'] ),
 		);
 	}
 

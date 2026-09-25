@@ -137,6 +137,23 @@ final class Agent_Publisher_Settings_Page {
 					</tr>
 				</table>
 
+				<h2><?php esc_html_e( 'Connections from claude.ai and mobile apps', 'acadium-agent-publisher' ); ?></h2>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'OAuth', 'acadium-agent-publisher' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox" name="<?php echo esc_attr( $name ); ?>[oauth_enabled]" value="1" <?php checked( $s['oauth_enabled'] ); ?> />
+								<?php esc_html_e( 'Allow OAuth connections', 'acadium-agent-publisher' ); ?>
+							</label>
+							<p class="description"><?php esc_html_e( 'Lets you add this site as a custom connector in claude.ai (web, desktop and mobile apps) without an Application Password. Each connection must be approved by an administrator, who picks the AI Agent user it acts as. Requires the MCP Adapter plugin.', 'acadium-agent-publisher' ); ?></p>
+							<?php if ( $s['oauth_enabled'] ) : ?>
+								<p><?php esc_html_e( 'Connector URL:', 'acadium-agent-publisher' ); ?> <code><?php echo esc_html( Agent_Publisher_OAuth_Server::resource() ); ?></code></p>
+							<?php endif; ?>
+						</td>
+					</tr>
+				</table>
+
 				<?php submit_button(); ?>
 			</form>
 
