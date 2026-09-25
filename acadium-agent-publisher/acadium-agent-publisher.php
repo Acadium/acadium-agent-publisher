@@ -28,8 +28,10 @@ define( 'AGENT_PUBLISHER_DIR', __DIR__ );
 
 require_once __DIR__ . '/includes/class-policy.php';
 require_once __DIR__ . '/includes/class-abilities.php';
+require_once __DIR__ . '/includes/class-settings-page.php';
 
 Agent_Publisher_Policy::init();
 Agent_Publisher_Abilities::init();
+Agent_Publisher_Settings_Page::init();
 
 register_activation_hook( __FILE__, array( 'Agent_Publisher_Policy', 'add_role' ) );
