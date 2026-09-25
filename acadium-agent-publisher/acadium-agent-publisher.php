@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name:       Agent Publisher
- * Plugin URI:        https://github.com/Acadium/agent-publisher
+ * Plugin Name:       Acadium Agent Publisher
+ * Plugin URI:        https://github.com/Acadium/acadium-agent-publisher
  * Description:       Let Claude and other AI agents draft posts, update drafts, upload images and look up categories and tags, as a drafts-only user. Works with the WordPress Abilities API and the MCP Adapter.
  * Version:           1.0.0
  * Requires at least: 6.9
@@ -10,7 +10,7 @@
  * Author URI:        https://acadium.com
  * License:           GPLv2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain:       agent-publisher
+ * Text Domain:       acadium-agent-publisher
  *
  * Registers five abilities with the WordPress Abilities API (WordPress 6.9+):
  *
@@ -63,7 +63,7 @@ final class Agent_Publisher {
 
 	public static function add_role() {
 		remove_role( self::ROLE );
-		add_role( self::ROLE, __( 'AI Agent (drafts only)', 'agent-publisher' ), self::ROLE_CAPS );
+		add_role( self::ROLE, __( 'AI Agent (drafts only)', 'acadium-agent-publisher' ), self::ROLE_CAPS );
 		update_option( 'agent_publisher_role_version', self::ROLE_VERSION );
 	}
 
@@ -79,8 +79,8 @@ final class Agent_Publisher {
 
 	public static function register_category() {
 		wp_register_ability_category( self::CATEGORY, array(
-			'label'       => __( 'Content drafting', 'agent-publisher' ),
-			'description' => __( 'Draft posts, update drafts, upload images and look up taxonomy terms.', 'agent-publisher' ),
+			'label'       => __( 'Content drafting', 'acadium-agent-publisher' ),
+			'description' => __( 'Draft posts, update drafts, upload images and look up taxonomy terms.', 'acadium-agent-publisher' ),
 		) );
 	}
 
@@ -138,7 +138,7 @@ final class Agent_Publisher {
 		);
 
 		wp_register_ability( 'agent-publisher/list-terms', array(
-			'label'               => __( 'List categories or tags', 'agent-publisher' ),
+			'label'               => __( 'List categories or tags', 'acadium-agent-publisher' ),
 			'description'         => 'Lists existing categories or tags with their IDs, so posts can be filed correctly. Call this before create-draft-post to pick category IDs. Supports a search filter.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
@@ -172,7 +172,7 @@ final class Agent_Publisher {
 		) );
 
 		wp_register_ability( 'agent-publisher/get-post', array(
-			'label'               => __( 'Get a post', 'agent-publisher' ),
+			'label'               => __( 'Get a post', 'acadium-agent-publisher' ),
 			'description'         => 'Returns a post the current user can edit, including its raw HTML content, categories, tags, featured image and allowed custom fields. Use it before update-draft-post to see the current text.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
@@ -197,7 +197,7 @@ final class Agent_Publisher {
 		) );
 
 		wp_register_ability( 'agent-publisher/create-draft-post', array(
-			'label'               => __( 'Create a draft post', 'agent-publisher' ),
+			'label'               => __( 'Create a draft post', 'acadium-agent-publisher' ),
 			'description'         => 'Creates a new post as a DRAFT (never published) for a human to review and publish in WordPress. Returns the post ID and an edit URL to share with the reviewer.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
@@ -218,7 +218,7 @@ final class Agent_Publisher {
 		) );
 
 		wp_register_ability( 'agent-publisher/update-draft-post', array(
-			'label'               => __( 'Update a draft post', 'agent-publisher' ),
+			'label'               => __( 'Update a draft post', 'acadium-agent-publisher' ),
 			'description'         => 'Changes fields of a post that is still a draft or pending review. Only the fields you pass are changed. Published and scheduled posts are refused: ask a human to revert them to draft first.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
@@ -238,7 +238,7 @@ final class Agent_Publisher {
 		) );
 
 		wp_register_ability( 'agent-publisher/upload-media', array(
-			'label'               => __( 'Upload an image', 'agent-publisher' ),
+			'label'               => __( 'Upload an image', 'acadium-agent-publisher' ),
 			'description'         => 'Adds an image to the Media Library from a public https URL or from base64 data, with alt text. Optionally attaches it to a draft and makes it that draft\'s featured image. Returns the attachment ID and URL to use in post content.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(

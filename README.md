@@ -1,8 +1,8 @@
-# Agent Publisher
+# Acadium Agent Publisher
 
 Let Claude and other AI agents draft posts, upload images and look up categories and tags on a WordPress site, as a **drafts-only** user you control.
 
-Agent Publisher registers five abilities with the WordPress **Abilities API** (core since 6.9). The [MCP Adapter](https://github.com/WordPress/mcp-adapter) plugin exposes them to MCP clients such as Claude Desktop and Claude Code:
+Acadium Agent Publisher registers five abilities with the WordPress **Abilities API** (core since 6.9). The [MCP Adapter](https://github.com/WordPress/mcp-adapter) plugin exposes them to MCP clients such as Claude Desktop and Claude Code:
 
 | Ability | Kind | What it does |
 |---|---|---|
@@ -31,7 +31,7 @@ The agent signs in as its own WordPress user with an **Application Password**. A
 
 ## Setup (about 15 minutes)
 
-1. **Install Agent Publisher.** Upload `dist/agent-publisher.zip` under Plugins > Add New > Upload Plugin, then activate it.
+1. **Install Acadium Agent Publisher.** Upload `dist/acadium-agent-publisher.zip` under Plugins > Add New > Upload Plugin, then activate it.
 2. **Install the MCP Adapter.** Download `mcp-adapter.zip` from its [releases](https://github.com/WordPress/mcp-adapter/releases), upload it the same way, and activate it.
 3. **Create the agent user.** Under Users > Add New User, create e.g. `claude` with the role **AI Agent (drafts only)**. Never use Author, Editor or Administrator.
    ```bash
@@ -100,7 +100,7 @@ add_filter( 'agent_publisher_post_meta', function ( $keys ) {
 | No "Application Passwords" section | Use HTTPS, and re-enable Application Passwords in your security plugin or host |
 | 401/403 on all of `/wp-json/` | A "disable REST API" plugin or host rule is blocking it; allow logged-in users |
 | An HTML "403 Forbidden" page | A WAF is blocking it (Cloudflare, Sucuri, ModSecurity…); allow authenticated `POST /wp-json/mcp/*` and larger bodies |
-| Only 3 `core/*` abilities visible | Activate Agent Publisher; WordPress must be 6.9+ |
+| Only 3 `core/*` abilities visible | Activate Acadium Agent Publisher; WordPress must be 6.9+ |
 | "Permission denied" | Give the agent user the **AI Agent (drafts only)** role |
 | "Only drafts can be changed" | By design: switch the post back to Draft to let the agent revise it |
 
@@ -110,9 +110,9 @@ Revoke the Application Password (Users > agent > Application Passwords), or dele
 
 ## Development
 
-- Plugin source: [`agent-publisher/`](agent-publisher/). It's plain PHP with no build step or dependencies.
-- Package for WordPress.org or manual install: `bin/build-zip.sh` writes `dist/agent-publisher.zip`. It checks that the plugin header version matches the readme's `Stable tag`.
-- Before a release, run the official [Plugin Check](https://wordpress.org/plugins/plugin-check/) plugin (`wp plugin check agent-publisher`).
+- Plugin source: [`acadium-agent-publisher/`](acadium-agent-publisher/). It's plain PHP with no build step or dependencies.
+- Package for WordPress.org or manual install: `bin/build-zip.sh` writes `dist/acadium-agent-publisher.zip`. It checks that the plugin header version matches the readme's `Stable tag`.
+- Before a release, run the official [Plugin Check](https://wordpress.org/plugins/plugin-check/) plugin (`wp plugin check acadium-agent-publisher`).
 
 ## License
 

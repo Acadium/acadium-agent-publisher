@@ -1,4 +1,4 @@
-=== Agent Publisher ===
+=== Acadium Agent Publisher ===
 Contributors: anselbrandt
 Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
@@ -12,7 +12,7 @@ Let Claude and other AI agents draft posts, upload images and look up categories
 
 == Description ==
 
-Agent Publisher lets an AI agent, such as Claude, write blog posts for your site through the WordPress Abilities API, and through the Model Context Protocol (MCP) when the MCP Adapter plugin is installed.
+Acadium Agent Publisher lets an AI agent, such as Claude, write blog posts for your site through the WordPress Abilities API, and through the Model Context Protocol (MCP) when the MCP Adapter plugin is installed.
 
 The agent signs in as its own WordPress user with an Application Password, and that user gets the **AI Agent (drafts only)** role that this plugin adds. The agent can:
 
@@ -42,11 +42,11 @@ Filters:
 * `agent_publisher_upload_mimes`: accepted image types (default: JPEG, PNG, GIF, WebP).
 * `agent_publisher_max_upload`: maximum upload size in bytes (default: 10 MB).
 
-Development happens on GitHub: https://github.com/Acadium/agent-publisher
+Development happens on GitHub: https://github.com/Acadium/acadium-agent-publisher
 
 == Installation ==
 
-1. Install and activate Agent Publisher. This adds the role **AI Agent (drafts only)**.
+1. Install and activate Acadium Agent Publisher. This adds the role **AI Agent (drafts only)**.
 2. For MCP clients (Claude Desktop, Claude Code), also install the MCP Adapter plugin from https://github.com/WordPress/mcp-adapter/releases.
 3. Go to Users > Add New User and create a user for the agent (for example `claude`) with the role **AI Agent (drafts only)**. Do not give the agent the Author, Editor or Administrator role.
 4. Edit that user and create an Application Password under "Application Passwords". Copy it; it is shown once.
