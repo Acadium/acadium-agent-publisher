@@ -1,0 +1,20 @@
+{
+	"name": "acadium/acadium-agent-publisher",
+	"description": "Let Claude and other AI agents draft, review and publish WordPress posts within rules you set.",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"require": {
+		"php": ">=7.4",
+		"automattic/jetpack-autoloader": "^5.0",
+		"wordpress/mcp-adapter": "0.6.1"
+	},
+	"config": {
+		"platform": {
+			"php": "7.4"
+		},
+		"optimize-autoloader": true,
+		"allow-plugins": {
+			"automattic/jetpack-autoloader": true
+		}
+	}
+}

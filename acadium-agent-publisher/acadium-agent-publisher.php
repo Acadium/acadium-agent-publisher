@@ -27,6 +27,13 @@ define( 'AGENT_PUBLISHER_VERSION', '1.2.0' );
 define( 'AGENT_PUBLISHER_FILE', __FILE__ );
 define( 'AGENT_PUBLISHER_DIR', __DIR__ );
 
+// Bundled MCP Adapter (github.com/WordPress/mcp-adapter) via the Jetpack
+// Autoloader, which loads only the newest copy when other plugins (or the
+// standalone MCP Adapter plugin) bundle it too.
+if ( is_readable( __DIR__ . '/vendor/autoload_packages.php' ) ) {
+	require_once __DIR__ . '/vendor/autoload_packages.php';
+}
+
 require_once __DIR__ . '/includes/class-policy.php';
 require_once __DIR__ . '/includes/class-abilities.php';
 require_once __DIR__ . '/includes/class-settings-page.php';
@@ -37,6 +44,12 @@ Agent_Publisher_Policy::init();
 Agent_Publisher_Abilities::init();
 Agent_Publisher_Settings_Page::init();
 Agent_Publisher_OAuth_Server::init();
+
+add_action( 'plugins_loaded', function () {
+	if ( class_exists( 'WP\MCP\Core\McpAdapter' ) ) {
+		\WP\MCP\Core\McpAdapter::instance();
+	}
+} );
 
 register_activation_hook( __FILE__, function () {
 	Agent_Publisher_Policy::add_role();
