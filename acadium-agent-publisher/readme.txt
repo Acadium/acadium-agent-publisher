@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.2.0
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -12,7 +12,7 @@ Let Claude and other AI agents draft, review and publish posts, upload images an
 
 == Description ==
 
-Acadium Agent Publisher lets an AI agent, such as Claude, write and publish blog posts for your site through the WordPress Abilities API, and through the Model Context Protocol (MCP) when the MCP Adapter plugin is installed.
+Acadium Agent Publisher lets an AI agent, such as Claude, write and publish blog posts for your site through the WordPress Abilities API and the Model Context Protocol (MCP). The official MCP Adapter library is built in, so there is nothing else to install.
 
 The agent signs in as its own WordPress user with an Application Password, and that user gets the **AI Agent** role that this plugin adds. Under **Settings > Agent Publisher** you decide how far the agent may go:
 
@@ -63,7 +63,7 @@ Publishing can trigger things that unpublishing cannot undo, such as subscriber 
 * `agent-publisher/unpublish-post`
 * `agent-publisher/update-published-post`
 
-They are available through the core Abilities REST API (`/wp-json/wp-abilities/v1/`; read-only abilities use GET, the others POST) and, with the MCP Adapter plugin, to MCP clients such as Claude Desktop and Claude Code.
+They are available through the core Abilities REST API (`/wp-json/wp-abilities/v1/`; read-only abilities use GET, the others POST) and, as one MCP tool each, at the plugin's MCP endpoint `/wp-json/acadium-agent-publisher/mcp` for clients such as claude.ai, Claude Desktop and Claude Code.
 
 = For developers =
 
@@ -78,14 +78,14 @@ Development happens on GitHub: https://github.com/Acadium/acadium-agent-publishe
 
 == Installation ==
 
-1. Install and activate Acadium Agent Publisher. This adds the **AI Agent** role.
-2. For MCP clients (Claude Desktop, Claude Code), also install the MCP Adapter plugin from https://github.com/WordPress/mcp-adapter/releases.
+1. Under Settings > Permalinks, choose any structure except "Plain" (for example "Post name"). The plugin offers a one-click button if you forget.
+2. Install and activate Acadium Agent Publisher. This adds the **AI Agent** role.
 3. Go to Users > Add New User and create a user for the agent (for example `claude`) with the role **AI Agent**. Do not give the agent the Author, Editor or Administrator role.
 4. Edit that user and create an Application Password under "Application Passwords". Copy it; it is shown once.
 5. Choose what the agent may do under Settings > Agent Publisher (default: Drafts only).
 6. Connect your AI client, either way:
-   * **claude.ai (web, desktop, mobile):** turn on "Allow OAuth connections" under Settings > Agent Publisher. In claude.ai, go to Settings > Connectors > Add custom connector and enter `https://your-site/wp-json/mcp/mcp-adapter-default-server`. Log in to WordPress as an administrator when asked, choose the AI Agent user and click Allow. You can skip step 4.
-   * **Claude Desktop or Claude Code with an Application Password:** point the client at `https://your-site/wp-json/mcp/mcp-adapter-default-server` with the agent's username and Application Password. The GitHub README has ready-to-paste configurations.
+   * **claude.ai (web, desktop, mobile):** turn on "Allow OAuth connections" under Settings > Agent Publisher. In claude.ai, go to Settings > Connectors > Add custom connector and enter `https://your-site/wp-json/acadium-agent-publisher/mcp`. Log in to WordPress as an administrator when asked, choose the AI Agent user and click Allow. You can skip step 4.
+   * **Claude Desktop or Claude Code with an Application Password:** point the client at `https://your-site/wp-json/acadium-agent-publisher/mcp` with the agent's username and Application Password. The GitHub README has ready-to-paste configurations.
 
 Your site must use HTTPS (WordPress disables Application Passwords on plain HTTP).
 
@@ -102,6 +102,10 @@ No. The AI Agent role has no publishing capabilities, so the regular REST API re
 = Can I use it from the Claude mobile app? =
 
 Yes. Turn on "Allow OAuth connections" under Settings > Agent Publisher and add your site as a custom connector in claude.ai. Connectors added there are also available in the Claude mobile apps.
+
+= Do I need the MCP Adapter plugin? =
+
+No. The plugin includes the official MCP Adapter (https://github.com/WordPress/mcp-adapter) library. If the MCP Adapter plugin, or another plugin that includes it (such as WooCommerce), is also active, WordPress loads the newest copy once, so they do not conflict. The MCP Adapter's default endpoint, `/wp-json/mcp/mcp-adapter-default-server`, keeps working for connections made with version 1.2 or earlier.
 
 = Who can approve an OAuth connection? =
 
@@ -129,6 +133,12 @@ Your web server may be removing the Authorization header, which is common with A
 
 == Changelog ==
 
+= 1.3.0 =
+* The MCP Adapter is now built in; the separate MCP Adapter plugin is no longer needed.
+* New MCP endpoint `/wp-json/acadium-agent-publisher/mcp` lists each ability as its own tool. The MCP Adapter default endpoint keeps working, including with OAuth.
+* A notice with a one-click fix when the site uses "Plain" permalinks, which AI clients cannot connect through.
+* Setup status on the settings page now shows permalinks and the connection URL.
+
 = 1.2.0 =
 * OAuth 2.1 for MCP clients, so claude.ai (web, desktop and mobile apps) can connect as a custom connector without an Application Password. Includes discovery metadata (RFC 9728, RFC 8414), dynamic client registration (RFC 7591), authorization code with PKCE, rotating refresh tokens and revocation (RFC 7009).
 * Administrator consent screen: each connection acts as a chosen AI Agent user.
@@ -147,6 +157,9 @@ Your web server may be removing the Authorization header, which is common with A
 * First release: list terms, get post, create draft post, update draft post and upload media abilities, plus the AI Agent (drafts only) role.
 
 == Upgrade Notice ==
+
+= 1.3.0 =
+The MCP Adapter is built in, and the new connection URL is /wp-json/acadium-agent-publisher/mcp. Existing connections keep working.
 
 = 1.2.0 =
 Adds optional OAuth so claude.ai and the Claude mobile apps can connect. Off until you enable it under Settings > Agent Publisher.

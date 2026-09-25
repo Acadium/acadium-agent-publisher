@@ -180,27 +180,18 @@ docker compose run --rm wpcli option get siteurl
 
 **Check that Application Passwords are available.** Go to **Users → Profile**; the page should show an *Application Passwords* section. If it's missing, WordPress doesn't see the request as HTTPS: recheck step 1.2.
 
-**Install the MCP Adapter plugin.** It exposes the plugin's abilities to Claude. It isn't in the WordPress.org directory; install it from its GitHub release:
-
-```bash
-docker compose run --rm wpcli plugin install \
-  https://github.com/WordPress/mcp-adapter/releases/download/v0.6.1/mcp-adapter.zip --activate
-```
-
-(or download `mcp-adapter.zip` from <https://github.com/WordPress/mcp-adapter/releases> and upload it under Plugins → Add New → Upload Plugin.)
-
 ---
 
 ## 3. Install Acadium Agent Publisher
 
 ```bash
 docker compose run --rm wpcli plugin install \
-  https://github.com/Acadium/acadium-agent-publisher/raw/v1.2.0/dist/acadium-agent-publisher.zip --activate
+  https://github.com/Acadium/acadium-agent-publisher/raw/v1.3.0/dist/acadium-agent-publisher.zip --activate
 ```
 
-(or upload [`dist/acadium-agent-publisher.zip`](../dist/acadium-agent-publisher.zip) under Plugins → Add New → Upload Plugin.)
+(or upload [`dist/acadium-agent-publisher.zip`](../dist/acadium-agent-publisher.zip) under Plugins → Add New → Upload Plugin.) The MCP Adapter is built in; you don't need to install it separately.
 
-Check both plugins are active:
+Check the plugin is active:
 
 ```bash
 docker compose run --rm wpcli plugin list --fields=name,status,version
@@ -243,7 +234,7 @@ There's nothing to install, and no password to copy. It needs **Allow OAuth conn
 1. In **claude.ai** go to **Settings → Connectors → Add custom connector**.
 2. Name it (e.g. *My blog*) and enter the URL:
    ```
-   https://blog.example.com/wp-json/mcp/mcp-adapter-default-server
+   https://blog.example.com/wp-json/acadium-agent-publisher/mcp
    ```
 3. Click **Connect**. Your site's WordPress login opens: **log in as an administrator**, choose the **AI Agent** user (e.g. *Claude (claude)*), and click **Allow**.
 4. The connector now works in claude.ai on the web, in Claude Desktop, and in the **Claude mobile apps** (same account). Enable it in a chat from the tools menu.
@@ -274,7 +265,7 @@ curl -s https://blog.example.com/.well-known/oauth-authorization-server
          "command": "npx",
          "args": ["-y", "@automattic/mcp-wordpress-remote@latest"],
          "env": {
-           "WP_API_URL": "https://blog.example.com/wp-json/mcp/mcp-adapter-default-server",
+           "WP_API_URL": "https://blog.example.com/wp-json/acadium-agent-publisher/mcp",
            "WP_API_USERNAME": "claude",
            "WP_API_PASSWORD": "xxxx xxxx xxxx xxxx xxxx xxxx"
          }
@@ -286,18 +277,18 @@ curl -s https://blog.example.com/.well-known/oauth-authorization-server
    **Claude Code:**
    ```bash
    claude mcp add my-wordpress \
-     -e WP_API_URL=https://blog.example.com/wp-json/mcp/mcp-adapter-default-server \
+     -e WP_API_URL=https://blog.example.com/wp-json/acadium-agent-publisher/mcp \
      -e WP_API_USERNAME=claude \
      -e 'WP_API_PASSWORD=xxxx xxxx xxxx xxxx xxxx xxxx' \
      -- npx -y @automattic/mcp-wordpress-remote@latest
    ```
 
-Check the password works (this should print `"MCP Adapter Default Server"`):
+Check the password works (this should print `"Acadium Agent Publisher"`):
 
 ```bash
 curl -s -u 'claude:xxxx xxxx xxxx xxxx xxxx xxxx' \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-  https://blog.example.com/wp-json/mcp/mcp-adapter-default-server \
+  https://blog.example.com/wp-json/acadium-agent-publisher/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
 ```
 

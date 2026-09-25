@@ -2,8 +2,9 @@
 /**
  * Abilities exposed to AI agents (WordPress Abilities API, 6.9+).
  *
- * The MCP Adapter plugin exposes them to MCP clients through its
- * discover / get-info / execute tools; the core REST API exposes them under
+ * The plugin's MCP server (class-mcp-server.php) lists them as MCP tools; the
+ * MCP Adapter default server reaches them through its discover / get-info /
+ * execute tools; the core REST API exposes them under
  * /wp-json/wp-abilities/v1/. Each ability runs as the WordPress user the
  * client authenticated as, and WordPress' capability checks and HTML
  * filtering apply.
