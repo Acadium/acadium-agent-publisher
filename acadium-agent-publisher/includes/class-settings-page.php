@@ -20,6 +20,48 @@ final class Agent_Publisher_Settings_Page {
 		add_action( 'admin_init', array( __CLASS__, 'register' ) );
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename( AGENT_PUBLISHER_FILE ), array( __CLASS__, 'action_links' ) );
+		add_action( 'admin_notices', array( __CLASS__, 'permalinks_notice' ) );
+		add_action( 'admin_post_agent_publisher_enable_permalinks', array( __CLASS__, 'enable_permalinks' ) );
+	}
+
+	/** The connection URL and OAuth discovery (/.well-known/…) need pretty permalinks. */
+	public static function has_pretty_permalinks() {
+		return '' !== (string) get_option( 'permalink_structure' );
+	}
+
+	/** On the Plugins screen and this plugin's settings page only: offer to turn on pretty permalinks. */
+	public static function permalinks_notice() {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( self::has_pretty_permalinks() || ! current_user_can( 'manage_options' ) || ! $screen || ! in_array( $screen->id, array( 'plugins', 'settings_page_' . self::SLUG ), true ) ) {
+			return;
+		}
+		?>
+		<div class="notice notice-warning">
+			<p>
+				<strong><?php esc_html_e( 'Acadium Agent Publisher needs pretty permalinks.', 'acadium-agent-publisher' ); ?></strong>
+				<?php esc_html_e( 'AI apps such as Claude cannot connect while this site uses "Plain" permalinks. Switching to "Post name" changes post links to example.com/sample-post/; old links keep working.', 'acadium-agent-publisher' ); ?>
+			</p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:0 0 .5em;">
+				<input type="hidden" name="action" value="agent_publisher_enable_permalinks" />
+				<?php wp_nonce_field( 'agent_publisher_enable_permalinks' ); ?>
+				<button type="submit" class="button button-primary"><?php esc_html_e( 'Use "Post name" permalinks', 'acadium-agent-publisher' ); ?></button>
+				<a class="button" href="<?php echo esc_url( admin_url( 'options-permalink.php' ) ); ?>"><?php esc_html_e( 'Choose another structure', 'acadium-agent-publisher' ); ?></a>
+			</form>
+		</div>
+		<?php
+	}
+
+	/** admin-post handler: set the "Post name" structure, as Settings > Permalinks would. */
+	public static function enable_permalinks() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to do that.', 'acadium-agent-publisher' ), 403 );
+		}
+		check_admin_referer( 'agent_publisher_enable_permalinks' );
+		global $wp_rewrite;
+		$wp_rewrite->set_permalink_structure( '/%postname%/' );
+		flush_rewrite_rules();
+		wp_safe_redirect( add_query_arg( 'agent-publisher-permalinks', '1', admin_url( 'options-general.php?page=' . self::SLUG ) ) );
+		exit;
 	}
 
 	public static function register() {
@@ -166,6 +208,10 @@ final class Agent_Publisher_Settings_Page {
 
 	private static function render_connections( array $s ) {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only flag after a nonce-checked redirect.
+		if ( isset( $_GET['agent-publisher-permalinks'] ) && self::has_pretty_permalinks() ) {
+			echo '<div class="notice notice-success inline"><p>' . esc_html__( 'Pretty permalinks are on. If the connection URL below returns "Not Found", your web server does not apply WordPress rewrite rules yet: see Settings > Permalinks.', 'acadium-agent-publisher' ) . '</p></div>';
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only flag after a nonce-checked redirect.
 		if ( isset( $_GET['agent-publisher-revoked'] ) ) {
 			echo '<div class="notice notice-success inline"><p>' . esc_html__( 'Connection removed. The app can no longer access this site.', 'acadium-agent-publisher' ) . '</p></div>';
 		}
@@ -250,14 +296,23 @@ final class Agent_Publisher_Settings_Page {
 					<td><?php echo is_ssl() || 'https' === wp_parse_url( home_url(), PHP_URL_SCHEME ) ? $yes : $no; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>
 				</tr>
 				<tr>
+					<td><?php esc_html_e( 'Pretty permalinks', 'acadium-agent-publisher' ); ?></td>
+					<td>
+						<?php echo self::has_pretty_permalinks() ? $yes : $no; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>
+						<?php if ( ! self::has_pretty_permalinks() ) : ?>
+							&mdash; <a href="<?php echo esc_url( admin_url( 'options-permalink.php' ) ); ?>"><?php esc_html_e( 'Settings > Permalinks', 'acadium-agent-publisher' ); ?></a>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
 					<td><?php esc_html_e( 'Application Passwords available', 'acadium-agent-publisher' ); ?></td>
 					<td><?php echo $app_pw ? $yes : $no; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>
 				</tr>
 				<tr>
 					<td><?php esc_html_e( 'MCP server ready', 'acadium-agent-publisher' ); ?></td>
 					<td>
-						<?php echo $mcp ? $yes : $no; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>
-						<?php if ( $mcp ) : ?>
+						<?php echo $mcp && self::has_pretty_permalinks() ? $yes : $no; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>
+						<?php if ( $mcp && self::has_pretty_permalinks() ) : ?>
 							&mdash; <?php esc_html_e( 'Connection URL:', 'acadium-agent-publisher' ); ?> <code><?php echo esc_html( $endpoint ); ?></code>
 						<?php endif; ?>
 					</td>
