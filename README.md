@@ -2,7 +2,11 @@
 
 Let Claude and other AI agents draft, review and publish posts on a WordPress site, upload images and look up categories and tags, **within rules the site owner sets**.
 
-Acadium Agent Publisher registers abilities with the WordPress **Abilities API** (core since 6.9). The [MCP Adapter](https://github.com/WordPress/mcp-adapter) plugin exposes them to MCP clients such as Claude Desktop and Claude Code.
+Acadium Agent Publisher registers abilities with the WordPress **Abilities API** (core since 6.9). The [MCP Adapter](https://github.com/WordPress/mcp-adapter) plugin exposes them to MCP clients.
+
+**How clients can connect:**
+- **claude.ai on the web, desktop and the Claude mobile apps:** add the site as a custom connector, with the optional built-in OAuth. There's nothing to install on a computer.
+- **Claude Desktop / Claude Code:** use an Application Password.
 
 ## Publishing modes
 
@@ -51,10 +55,30 @@ The agent signs in as its own WordPress user with an **Application Password**. A
 
 Publishing can trigger things unpublishing can't undo, such as subscriber emails or social posts from other plugins. Start with *Drafts only*.
 
+### OAuth (claude.ai connectors)
+
+It's off until you enable **Allow OAuth connections**. It follows the [MCP authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization):
+
+| Endpoint | Purpose |
+|---|---|
+| `/.well-known/oauth-protected-resource` | RFC 9728; also advertised in the MCP endpoint's `401 WWW-Authenticate` header |
+| `/.well-known/oauth-authorization-server` | RFC 8414 metadata |
+| `/agent-publisher-oauth/register` | RFC 7591 dynamic client registration (https or localhost redirect URIs) |
+| `/agent-publisher-oauth/authorize` | Administrator consent screen; authorization code with PKCE S256 (required) |
+| `/agent-publisher-oauth/token` | `authorization_code` and `refresh_token` grants |
+| `/agent-publisher-oauth/revoke` | RFC 7009 |
+
+- **Consent:** only administrators can approve a connection. It always acts as the **AI Agent** user they pick, never as the administrator, so the mode and checks above apply unchanged.
+- **Tokens:** access tokens last 1 hour. Refresh tokens last 30 days and are single-use (rotated). Tokens are stored as SHA-256 hashes, and they authenticate only the MCP (`/mcp/…`) and Abilities (`/wp-abilities/…`) REST routes.
+- **Codes:** authorization codes are single-use and expire after 10 minutes. `redirect_uri` must match exactly, and errors about the client or `redirect_uri` are shown on the page, never redirected.
+- **Connected apps:** listed under Settings > Agent Publisher, each with a **Disconnect** button. Deleting an agent user also ends its connections.
+- **Why not the REST API:** the endpoints are served before WordPress' query parsing, so "disable REST API" plugins don't block them.
+
 ## Requirements
 
 - WordPress 6.9+ (Abilities API), PHP 7.4+
 - HTTPS (WordPress disables Application Passwords on plain HTTP)
+- For OAuth: WordPress installed at the root of its domain (`/.well-known/` discovery), and any CDN or firewall passing `/.well-known/`, `/agent-publisher-oauth/` and the `Authorization` header through to WordPress
 - For MCP clients: the [MCP Adapter](https://github.com/WordPress/mcp-adapter/releases) plugin (tested with 0.6.1)
 
 ## Setup (about 15 minutes)
@@ -70,7 +94,15 @@ Publishing can trigger things unpublishing can't undo, such as subscriber emails
    wp user application-password create claude "Claude Desktop" --porcelain
    ```
 5. **Choose what the agent may do** under Settings > Agent Publisher (default: Drafts only).
-6. **Connect Claude.** You need Node.js 18+ for the local bridge [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote).
+6. **Connect Claude.** Pick one of the two options below.
+
+   **Option A: claude.ai, including the mobile apps (OAuth).** No Application Password or Node.js needed; you can skip step 4.
+   1. Under Settings > Agent Publisher, turn on **Allow OAuth connections** and save.
+   2. In claude.ai, go to **Settings > Connectors > Add custom connector**, name it, and enter `https://YOUR-SITE/wp-json/mcp/mcp-adapter-default-server`.
+   3. Click **Connect**. Log in to WordPress as an **administrator**, choose the AI Agent user, and click **Allow**.
+   4. The connector then works in claude.ai on the web, in Claude Desktop, and in the Claude mobile apps.
+
+   **Option B: Claude Desktop / Claude Code with an Application Password.** You need Node.js 18+ for the local bridge [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote).
 
    **Claude Desktop:** go to Settings > Developer > Edit Config, add the following, and restart:
    ```json
@@ -135,10 +167,12 @@ add_filter( 'agent_publisher_post_meta', function ( $keys ) {
 | "Cannot publish: …" | A pre-publish check failed; the message says what to fix (nothing was changed) |
 | "Only drafts can be changed" | Use `update-published-post` (mode *Publish and edit live posts*) or `unpublish-post` first |
 | Scheduled posts don't go live | WordPress publishes them via WP-Cron; if it's disabled, run it from a server cron job |
+| claude.ai connector can't connect | Is **Allow OAuth connections** on? Does `https://YOUR-SITE/.well-known/oauth-authorization-server` return JSON? WordPress must be installed at the domain root. A CDN or WAF must pass `/.well-known/`, `/agent-publisher-oauth/` and the `Authorization` header through |
+| Consent page says only an administrator can approve | Log in as an administrator (not the agent user) to approve |
 
 ## Revoking access
 
-Revoke the Application Password (Users > agent > Application Passwords), or delete the agent user. Deactivating the plugin removes the abilities; uninstalling also removes the role.
+Revoke the Application Password (Users > agent > Application Passwords), disconnect OAuth apps under Settings > Agent Publisher > Connected apps, or delete the agent user. Deactivating the plugin removes the abilities; uninstalling also removes the role.
 
 ## Development
 

@@ -71,7 +71,7 @@ final class Agent_Publisher_OAuth_Store {
 
 	public static function uninstall() {
 		global $wpdb;
-		$wpdb->query( 'DROP TABLE IF EXISTS ' . self::table() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- table name only.
+		$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', self::table() ) );
 		delete_option( 'agent_publisher_oauth_db' );
 	}
 
@@ -113,10 +113,10 @@ final class Agent_Publisher_OAuth_Store {
 	/** A live (unexpired) row of $type for $secret, or null. */
 	private static function find( $type, $secret ) {
 		global $wpdb;
-		$table = self::table();
-		$row   = $wpdb->get_row(
+		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT * FROM $table WHERE token_hash = %s AND type = %s AND ( expires IS NULL OR expires > %s )", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name only.
+				'SELECT * FROM %i WHERE token_hash = %s AND type = %s AND ( expires IS NULL OR expires > %s )',
+				self::table(),
 				self::hash( $secret ),
 				$type,
 				self::now()
@@ -143,8 +143,7 @@ final class Agent_Publisher_OAuth_Store {
 	/** Remove expired codes and tokens (cheap; run opportunistically). */
 	public static function purge_expired() {
 		global $wpdb;
-		$table = self::table();
-		$wpdb->query( $wpdb->prepare( "DELETE FROM $table WHERE expires IS NOT NULL AND expires < %s", self::now() ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name only.
+		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE expires IS NOT NULL AND expires < %s', self::table(), self::now() ) );
 	}
 
 	/* ------------------------------------------------------------------ */
@@ -186,13 +185,18 @@ final class Agent_Publisher_OAuth_Store {
 	private static function prune_clients() {
 		global $wpdb;
 		$table = self::table();
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table WHERE type = 'client'" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name only.
+		$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM %i WHERE type = 'client'", $table ) );
 		if ( $count < self::MAX_CLIENTS ) {
 			return;
 		}
-		$ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name only.
-			"SELECT c.id FROM $table c LEFT JOIN $table g ON g.type = 'grant' AND g.client_id = c.client_id
-			 WHERE c.type = 'client' AND g.id IS NULL ORDER BY c.created ASC LIMIT " . (int) ( $count - self::MAX_CLIENTS + 1 )
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT c.id FROM %i c LEFT JOIN %i g ON g.type = 'grant' AND g.client_id = c.client_id
+				 WHERE c.type = 'client' AND g.id IS NULL ORDER BY c.created ASC LIMIT %d",
+				$table,
+				$table,
+				$count - self::MAX_CLIENTS + 1
+			)
 		);
 		foreach ( $ids as $id ) {
 			$wpdb->delete( $table, array( 'id' => (int) $id ) );
@@ -313,9 +317,13 @@ final class Agent_Publisher_OAuth_Store {
 		global $wpdb;
 		$table = self::table();
 		$rows  = $wpdb->get_results(
-			"SELECT g.grant_id, g.user_id, g.created, g.last_used, c.data AS client_data
-			 FROM $table g LEFT JOIN $table c ON c.type = 'client' AND c.client_id = g.client_id
-			 WHERE g.type = 'grant' ORDER BY g.created DESC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name only.
+			$wpdb->prepare(
+				"SELECT g.grant_id, g.user_id, g.created, g.last_used, c.data AS client_data
+				 FROM %i g LEFT JOIN %i c ON c.type = 'client' AND c.client_id = g.client_id
+				 WHERE g.type = 'grant' ORDER BY g.created DESC",
+				$table,
+				$table
+			),
 			ARRAY_A
 		);
 		foreach ( $rows as &$row ) {

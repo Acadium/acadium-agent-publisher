@@ -19,4 +19,4 @@ delete_option( 'agent_publisher_log' );
 delete_option( 'agent_publisher_oauth_db' );
 
 global $wpdb;
-$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . 'agent_publisher_oauth' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared -- plugin's own table.
+$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $wpdb->prefix . 'agent_publisher_oauth' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- plugin's own table.
