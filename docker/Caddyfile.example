@@ -1,0 +1,54 @@
+# Sample Caddyfile for WordPress from docker-compose.yml (published on
+# 127.0.0.1:8080). Use ONE of the two variants below: copy it into your
+# Caddyfile (usually /etc/caddy/Caddyfile), replace blog.example.com with your
+# domain, then reload Caddy:
+#
+#   sudo systemctl reload caddy
+#   # or: caddy reload --config /etc/caddy/Caddyfile
+#
+# WordPress needs three things from the proxy:
+#   - X-Forwarded-Proto: https  WordPress must know visitors use HTTPS, or it
+#                               redirects in a loop ("too many redirects") and
+#                               disables Application Passwords / OAuth.
+#   - the original Host header  so WordPress generates the right links.
+#   - the Authorization header  Application Passwords and OAuth tokens.
+# Caddy forwards Host and Authorization by default; X-Forwarded-Proto is
+# correct automatically in variant A and set explicitly in variant B.
+
+
+# ---------------------------------------------------------------------------
+# Variant A: Caddy terminates HTTPS itself (most setups)
+#
+# DNS for blog.example.com points at this machine, and ports 80 and 443 are
+# open. Caddy obtains and renews the certificate automatically and sets
+# X-Forwarded-Proto: https.
+# ---------------------------------------------------------------------------
+
+blog.example.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8080
+}
+
+
+# ---------------------------------------------------------------------------
+# Variant B: HTTPS is terminated in front of Caddy
+#
+# Examples: a Cloudflare Tunnel (cloudflared) forwarding to http://localhost:80,
+# or a load balancer that handles HTTPS. The request reaches Caddy over plain
+# HTTP, so by default Caddy would tell WordPress "http" and WordPress would
+# redirect in a loop. Visitors always use HTTPS at the edge, so tell WordPress
+# so explicitly.
+#
+# Delete variant A above and uncomment this block.
+# ---------------------------------------------------------------------------
+
+# :80 {
+# 	# Only accept connections from this machine (e.g. cloudflared), so the
+# 	# site can't be reached over plain HTTP from the network.
+# 	bind 127.0.0.1
+#
+# 	encode gzip
+# 	reverse_proxy 127.0.0.1:8080 {
+# 		header_up X-Forwarded-Proto https
+# 	}
+# }

@@ -79,6 +79,7 @@ It's off until you enable **Allow OAuth connections**. It follows the [MCP autho
 - WordPress 6.9+ (Abilities API), PHP 7.4+
 - HTTPS (WordPress disables Application Passwords on plain HTTP)
 - For OAuth: WordPress installed at the root of its domain (`/.well-known/` discovery), and any CDN or firewall passing `/.well-known/`, `/agent-publisher-oauth/` and the `Authorization` header through to WordPress
+- Behind a reverse proxy (Caddy, nginx, Cloudflare): the proxy must send `X-Forwarded-Proto: https` and pass `Host` and `Authorization` through. Otherwise WordPress redirects in a loop and disables Application Passwords. See the [reverse proxy note](docker/README.md#12-point-your-reverse-proxy-at-port-8080) and [`docker/Caddyfile.example`](docker/Caddyfile.example).
 - For MCP clients: the [MCP Adapter](https://github.com/WordPress/mcp-adapter/releases) plugin (tested with 0.6.1)
 
 ## Setup (about 15 minutes)

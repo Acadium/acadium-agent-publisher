@@ -55,7 +55,23 @@ curl -sI http://127.0.0.1:8080/ | head -1
 
 ### 1.2 Point your reverse proxy at port 8080
 
-**Caddy** (`Caddyfile`). Caddy gets the HTTPS certificate automatically:
+> **Reverse proxy note:** whichever proxy you use, WordPress needs three things from it:
+> 1. **`X-Forwarded-Proto: https`**, so WordPress knows visitors are on HTTPS. Without it, WordPress redirects in a loop ("too many redirects") and turns off Application Passwords and OAuth.
+> 2. **The original `Host` header**, so links and redirects use your domain.
+> 3. **The `Authorization` header**, which carries Application Passwords and OAuth tokens.
+>
+> **If something else handles HTTPS in front of your proxy** (a Cloudflare Tunnel, a load balancer, a CDN), the request reaches your proxy over plain HTTP. By default Caddy then reports `http`, which causes the loop. Use variant B of [`Caddyfile.example`](Caddyfile.example), which sends `X-Forwarded-Proto: https` explicitly.
+>
+> **Always open the site through the proxy** (`https://blog.example.com`), including for the first-time WordPress installer, never via `http://127.0.0.1:8080`. WordPress saves the address you install from as the site address.
+
+[`Caddyfile.example`](Caddyfile.example) has both variants, ready to copy:
+
+| Variant | Use when | What it does |
+|---|---|---|
+| **A** | Caddy handles HTTPS for your domain (DNS points at this machine, ports 80/443 open) | Automatic certificate; forwards to `127.0.0.1:8080` |
+| **B** | HTTPS is handled in front of Caddy, e.g. **Cloudflare Tunnel** → `http://localhost:80` | Listens on `:80` for this machine only; sends `X-Forwarded-Proto: https` |
+
+**Variant A:** Caddy gets the HTTPS certificate automatically:
 
 ```caddy
 blog.example.com {
@@ -70,6 +86,24 @@ Caddy passes on everything WordPress needs by default:
 - `X-Forwarded-Proto: https`, so WordPress knows the site is on HTTPS. The official WordPress image reads this header.
 - The original `Host` header.
 - The `Authorization` header (used by Application Passwords and OAuth tokens).
+
+**Variant B: behind a Cloudflare Tunnel** (tunnel service type **HTTP**, URL `localhost:80`):
+
+```caddy
+:80 {
+	bind 127.0.0.1                     # only cloudflared on this machine can connect
+	encode gzip
+	reverse_proxy 127.0.0.1:8080 {
+		header_up X-Forwarded-Proto https
+	}
+}
+```
+
+With Cloudflare in front, also check these two settings. Either can silently block Claude, which isn't a browser:
+- **Security → Bots:** *Bot Fight Mode* / *Super Bot Fight Mode* may challenge claude.ai's servers and the Claude Desktop bridge. That shows up as 403 errors or HTML challenge pages instead of JSON.
+- **Zero Trust → Access:** an Access policy on the hostname puts a login in front of everything. At least `/wp-json/mcp/*`, `/wp-json/wp-abilities/*`, `/.well-known/*` and `/agent-publisher-oauth/*` must bypass it.
+
+If you proxy the hostname through Cloudflare without a tunnel, set **SSL/TLS** to **Full (strict)**, not *Flexible*. *Flexible* reaches your server over plain HTTP and causes the same redirect loop.
 
 <details>
 <summary><strong>nginx instead of Caddy</strong></summary>
@@ -295,7 +329,9 @@ The volume name prefix is the Compose project name, which is this folder's name 
 
 | Symptom | Fix |
 |---|---|
-| Redirects go to `http://` or loop | The proxy isn't sending `X-Forwarded-Proto: https`, or `home`/`siteurl` are `http://`. Fix the proxy (step 1.2) and the options (step 2) |
+| **"Too many redirects"** | WordPress doesn't see HTTPS. With a Cloudflare Tunnel or another HTTPS-handling layer in front of Caddy, use variant B of `Caddyfile.example`. With Cloudflare's orange-cloud proxy, set SSL/TLS to **Full (strict)**. With nginx, add `proxy_set_header X-Forwarded-Proto $scheme;` |
+| Redirects go to `http://…` or `127.0.0.1:8080` | WordPress was installed via the direct port. Run `docker compose run --rm wpcli option update home https://blog.example.com` (and the same for `siteurl`) |
+| `403` or HTML challenge pages when Claude connects (Cloudflare) | Bot Fight Mode or Cloudflare Access is blocking non-browser clients; see step 1.2 |
 | `502 Bad Gateway` from the proxy | WordPress isn't up, or not on the port the proxy uses: `docker compose ps`, `curl -sI http://127.0.0.1:8080/` |
 | Port 8080 already in use | Set `WP_PORT=8081` in `.env`, `docker compose up -d`, and update the proxy |
 | No *Application Passwords* section | WordPress doesn't see HTTPS; see the first row |
