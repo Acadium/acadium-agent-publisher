@@ -69,7 +69,7 @@ final class Agent_Publisher_OAuth_Server {
 
 	/** Is this a REST request to the MCP Adapter or the Abilities API? */
 	private static function is_protected_request() {
-		$routes = array( '/mcp/', '/wp-abilities/' );
+		$routes = array( '/mcp/', '/wp-abilities/', '/' . Agent_Publisher_MCP_Server::NS . '/' );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check.
 		$route = isset( $_GET['rest_route'] ) ? sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ) : '';
 		if ( '' === $route && isset( $_SERVER['REQUEST_URI'] ) ) {
@@ -94,10 +94,12 @@ final class Agent_Publisher_OAuth_Server {
 		if ( ! self::enabled() || ! $response instanceof WP_REST_Response || 401 !== $response->get_status() ) {
 			return $response;
 		}
-		if ( 0 !== strpos( $request->get_route(), '/mcp/' ) && 0 !== strpos( $request->get_route(), '/wp-abilities/' ) ) {
+		$route = $request->get_route();
+		if ( 0 !== strpos( $route, '/mcp/' ) && 0 !== strpos( $route, '/wp-abilities/' ) && 0 !== strpos( $route, '/' . Agent_Publisher_MCP_Server::NS . '/' ) ) {
 			return $response;
 		}
-		$value = 'Bearer resource_metadata="' . self::resource_metadata_url() . '"';
+		$resource = 0 === strpos( $route, '/mcp/' ) || 0 === strpos( $route, '/' . Agent_Publisher_MCP_Server::NS . '/' ) ? rest_url( ltrim( $route, '/' ) ) : self::resource();
+		$value    = 'Bearer resource_metadata="' . self::resource_metadata_url( $resource ) . '"';
 		if ( self::$invalid_token ) {
 			$value .= ', error="invalid_token", error_description="The access token is invalid or expired"';
 		}
@@ -133,13 +135,23 @@ final class Agent_Publisher_OAuth_Server {
 		return home_url( '/' . self::PREFIX . '/' . $name );
 	}
 
-	/** The protected resource: the MCP Adapter's default server. */
+	/** The default protected resource: the plugin's own MCP server. */
 	public static function resource() {
-		return rest_url( 'mcp/mcp-adapter-default-server' );
+		return Agent_Publisher_MCP_Server::url();
 	}
 
-	public static function resource_metadata_url() {
-		return home_url( '/.well-known/oauth-protected-resource' );
+	/** Every MCP endpoint tokens are valid for (the MCP Adapter default server too). */
+	public static function resources() {
+		return array( Agent_Publisher_MCP_Server::url(), Agent_Publisher_MCP_Server::default_server_url() );
+	}
+
+	/**
+	 * RFC 9728 metadata URL for a resource: /.well-known/oauth-protected-resource
+	 * followed by the resource's path.
+	 */
+	public static function resource_metadata_url( $resource = null ) {
+		$path = (string) wp_parse_url( $resource ? $resource : self::resource(), PHP_URL_PATH );
+		return home_url( '/.well-known/oauth-protected-resource' . untrailingslashit( $path ) );
 	}
 
 	/* ------------------------------------------------------------------ */
@@ -153,8 +165,8 @@ final class Agent_Publisher_OAuth_Server {
 		$path = trim( (string) $wp->request, '/' );
 
 		// RFC 9728 / 8414 also allow a path suffix (the resource's or issuer's path).
-		if ( preg_match( '#^\.well-known/oauth-protected-resource(/.*)?$#', $path ) ) {
-			self::json( self::protected_resource_metadata() );
+		if ( preg_match( '#^\.well-known/oauth-protected-resource(/.*)?$#', $path, $m ) ) {
+			self::json( self::protected_resource_metadata( isset( $m[1] ) ? $m[1] : '' ) );
 		}
 		if ( preg_match( '#^\.well-known/(oauth-authorization-server|openid-configuration)(/.*)?$#', $path ) ) {
 			self::json( self::authorization_server_metadata() );
@@ -182,9 +194,16 @@ final class Agent_Publisher_OAuth_Server {
 	/* Metadata                                                            */
 	/* ------------------------------------------------------------------ */
 
-	public static function protected_resource_metadata() {
+	/** @param string $suffix Path after /.well-known/oauth-protected-resource (the resource's path), if any. */
+	public static function protected_resource_metadata( $suffix = '' ) {
+		$resource = self::resource();
+		foreach ( self::resources() as $candidate ) {
+			if ( '' !== $suffix && untrailingslashit( (string) wp_parse_url( $candidate, PHP_URL_PATH ) ) === untrailingslashit( $suffix ) ) {
+				$resource = $candidate;
+			}
+		}
 		return array(
-			'resource'                 => self::resource(),
+			'resource'                 => $resource,
 			'authorization_servers'    => array( self::issuer() ),
 			'bearer_methods_supported' => array( 'header' ),
 			'resource_name'            => get_bloginfo( 'name' ),
@@ -354,8 +373,8 @@ final class Agent_Publisher_OAuth_Server {
 	// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
 
 	private static function resource_ok( $resource ) {
-		$resource = untrailingslashit( $resource );
-		return in_array( $resource, array( untrailingslashit( self::resource() ), self::issuer(), untrailingslashit( rest_url() ) ), true );
+		$allowed = array_map( 'untrailingslashit', array_merge( self::resources(), array( self::issuer(), rest_url() ) ) );
+		return in_array( untrailingslashit( $resource ), $allowed, true );
 	}
 
 	/** This authorize request, rebuilt from its (string) query parameters, for the login redirect. */

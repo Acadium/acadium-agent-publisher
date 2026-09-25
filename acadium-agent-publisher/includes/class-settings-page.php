@@ -146,7 +146,7 @@ final class Agent_Publisher_Settings_Page {
 								<input type="checkbox" name="<?php echo esc_attr( $name ); ?>[oauth_enabled]" value="1" <?php checked( $s['oauth_enabled'] ); ?> />
 								<?php esc_html_e( 'Allow OAuth connections', 'acadium-agent-publisher' ); ?>
 							</label>
-							<p class="description"><?php esc_html_e( 'Lets you add this site as a custom connector in claude.ai (web, desktop and mobile apps) without an Application Password. Each connection must be approved by an administrator, who picks the AI Agent user it acts as. Requires the MCP Adapter plugin.', 'acadium-agent-publisher' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Lets you add this site as a custom connector in claude.ai (web, desktop and mobile apps) without an Application Password. Each connection must be approved by an administrator, who picks the AI Agent user it acts as.', 'acadium-agent-publisher' ); ?></p>
 							<?php if ( $s['oauth_enabled'] ) : ?>
 								<p><?php esc_html_e( 'Connector URL:', 'acadium-agent-publisher' ); ?> <code><?php echo esc_html( Agent_Publisher_OAuth_Server::resource() ); ?></code></p>
 							<?php endif; ?>
@@ -221,9 +221,9 @@ final class Agent_Publisher_Settings_Page {
 
 	private static function render_status() {
 		$agents   = get_users( array( 'role' => Agent_Publisher_Policy::ROLE, 'fields' => array( 'ID', 'user_login', 'display_name' ) ) );
-		$mcp      = function_exists( 'is_plugin_active' ) && is_plugin_active( 'mcp-adapter/mcp-adapter.php' );
+		$mcp      = class_exists( 'WP\MCP\Core\McpAdapter' );
 		$app_pw   = function_exists( 'wp_is_application_passwords_available' ) && wp_is_application_passwords_available();
-		$endpoint = rest_url( 'mcp/mcp-adapter-default-server' );
+		$endpoint = Agent_Publisher_MCP_Server::url();
 		$yes      = esc_html__( 'Yes', 'acadium-agent-publisher' );
 		$no       = esc_html__( 'No', 'acadium-agent-publisher' );
 		?>
@@ -254,11 +254,11 @@ final class Agent_Publisher_Settings_Page {
 					<td><?php echo $app_pw ? $yes : $no; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>
 				</tr>
 				<tr>
-					<td><?php esc_html_e( 'MCP Adapter plugin active', 'acadium-agent-publisher' ); ?></td>
+					<td><?php esc_html_e( 'MCP server ready', 'acadium-agent-publisher' ); ?></td>
 					<td>
 						<?php echo $mcp ? $yes : $no; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>
 						<?php if ( $mcp ) : ?>
-							&mdash; <?php esc_html_e( 'MCP endpoint:', 'acadium-agent-publisher' ); ?> <code><?php echo esc_html( $endpoint ); ?></code>
+							&mdash; <?php esc_html_e( 'Connection URL:', 'acadium-agent-publisher' ); ?> <code><?php echo esc_html( $endpoint ); ?></code>
 						<?php endif; ?>
 					</td>
 				</tr>

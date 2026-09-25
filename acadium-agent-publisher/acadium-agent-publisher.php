@@ -37,12 +37,14 @@ if ( is_readable( __DIR__ . '/vendor/autoload_packages.php' ) ) {
 require_once __DIR__ . '/includes/class-policy.php';
 require_once __DIR__ . '/includes/class-abilities.php';
 require_once __DIR__ . '/includes/class-settings-page.php';
+require_once __DIR__ . '/includes/class-mcp-server.php';
 require_once __DIR__ . '/includes/oauth/class-oauth-store.php';
 require_once __DIR__ . '/includes/oauth/class-oauth-server.php';
 
 Agent_Publisher_Policy::init();
 Agent_Publisher_Abilities::init();
 Agent_Publisher_Settings_Page::init();
+Agent_Publisher_MCP_Server::init();
 Agent_Publisher_OAuth_Server::init();
 
 add_action( 'plugins_loaded', function () {
