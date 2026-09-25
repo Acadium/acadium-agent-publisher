@@ -1,0 +1,71 @@
+# WordPress + MariaDB for Acadium Agent Publisher.
+#
+# WordPress listens on port 8080 of the host for a reverse proxy (e.g. Caddy)
+# that terminates HTTPS. See README.md in this folder.
+#
+#   cp .env.example .env    # then set the passwords
+#   docker compose up -d
+#   docker compose run --rm wpcli <wp-cli command>
+
+services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  wordpress:
+    image: wordpress:php8.3-apache
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # host:container. Bound to 127.0.0.1 so only a reverse proxy on this
+      # machine can reach it; set WP_BIND=0.0.0.0 in .env to expose it on
+      # all interfaces (e.g. when the proxy runs on another host).
+      - "${WP_BIND:-127.0.0.1}:${WP_PORT:-8080}:80"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD}
+      # The image's wp-config.php already treats X-Forwarded-Proto: https as
+      # HTTPS, which Application Passwords and OAuth need behind a proxy.
+      WORDPRESS_CONFIG_EXTRA: |
+        define( 'WP_ENVIRONMENT_TYPE', 'production' );
+    volumes:
+      - wordpress_data:/var/www/html
+
+  # One-off WP-CLI commands: docker compose run --rm wpcli <command>
+  wpcli:
+    image: wordpress:cli-php8.3
+    profiles: ["cli"]
+    user: "33:33" # www-data in the wordpress image, so files stay writable
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD}
+      HOME: /tmp
+    volumes:
+      - wordpress_data:/var/www/html
+    entrypoint: ["wp"]
+
+volumes:
+  db_data:
+  wordpress_data:
