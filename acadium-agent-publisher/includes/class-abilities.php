@@ -67,15 +67,6 @@ final class Agent_Publisher_Abilities {
 		$post_types = self::post_types();
 		$meta_keys  = self::meta_keys();
 
-		$meta_schema = array(
-			'type'                 => 'object',
-			'description'          => $meta_keys
-				? 'Custom fields. Allowed keys: ' . implode( ', ', $meta_keys ) . '.'
-				: 'Custom fields (none are enabled on this site).',
-			'properties'           => array_fill_keys( $meta_keys, array( 'type' => 'string' ) ),
-			'additionalProperties' => false,
-		);
-
 		$post_fields = array(
 			'title'          => array( 'type' => 'string', 'description' => 'Post title (plain text).' ),
 			'content'        => array( 'type' => 'string', 'description' => 'Post body as HTML. Use the markup the site\'s editor produces: plain HTML (<h2>, <p>, <ul>, <img>) for the classic editor, or block markup (<!-- wp:paragraph -->) for the block editor. Scripts, iframes and inline styles are removed unless the user may post unfiltered HTML.' ),
@@ -84,8 +75,19 @@ final class Agent_Publisher_Abilities {
 			'categories'     => array( 'type' => 'array', 'items' => array( 'type' => 'integer' ), 'description' => 'Category IDs (see agent-publisher/list-terms). Replaces existing categories.' ),
 			'tags'           => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'description' => 'Tag names. Missing tags are created. Replaces existing tags.' ),
 			'featured_media' => array( 'type' => 'integer', 'description' => 'Attachment ID for the featured image (see agent-publisher/upload-media).' ),
-			'meta'           => $meta_schema,
 		);
+
+		// Only offer custom fields when a site enables some. An empty
+		// `properties` would be encoded as a JSON array ([]), an invalid
+		// schema that makes MCP clients such as Claude Desktop drop the tool.
+		if ( $meta_keys ) {
+			$post_fields['meta'] = array(
+				'type'                 => 'object',
+				'description'          => 'Custom fields. Allowed keys: ' . implode( ', ', $meta_keys ) . '.',
+				'properties'           => array_fill_keys( $meta_keys, array( 'type' => 'string' ) ),
+				'additionalProperties' => false,
+			);
+		}
 
 		$post_output = array(
 			'type'       => 'object',

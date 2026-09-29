@@ -186,7 +186,7 @@ docker compose run --rm wpcli option get siteurl
 
 ```bash
 docker compose run --rm wpcli plugin install \
-  https://github.com/Acadium/acadium-agent-publisher/raw/v1.3.0/dist/acadium-agent-publisher.zip --activate
+  https://github.com/Acadium/acadium-agent-publisher/raw/v1.3.1/dist/acadium-agent-publisher.zip --activate
 ```
 
 (or upload [`dist/acadium-agent-publisher.zip`](../dist/acadium-agent-publisher.zip) under Plugins → Add New → Upload Plugin.) The MCP Adapter is built in; you don't need to install it separately.
@@ -257,14 +257,15 @@ curl -s https://blog.example.com/.well-known/oauth-authorization-server
 
 2. **Install Node.js 18+** on the computer running Claude. The connection uses the small bridge [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote), which `npx` downloads automatically.
 
-3. **Claude Desktop.** Go to Settings → Developer → Edit Config, add the following, and restart Claude Desktop:
+3. **Claude Desktop.** Go to Settings → Developer → Edit Config, add the following, and restart Claude Desktop. Claude Desktop doesn't use your shell's `PATH`, so give the full path from `which npx` as `command`, and its folder in `PATH` (see the main README, Option B):
    ```json
    {
      "mcpServers": {
        "my-wordpress": {
-         "command": "npx",
+         "command": "/usr/local/bin/npx",
          "args": ["-y", "@automattic/mcp-wordpress-remote@latest"],
          "env": {
+           "PATH": "/usr/local/bin:/usr/bin:/bin",
            "WP_API_URL": "https://blog.example.com/wp-json/acadium-agent-publisher/mcp",
            "WP_API_USERNAME": "claude",
            "WP_API_PASSWORD": "xxxx xxxx xxxx xxxx xxxx xxxx"

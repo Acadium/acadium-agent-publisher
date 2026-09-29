@@ -37,7 +37,7 @@ If you skip this, the plugin reminds you after step 3 and offers a one-click **U
 
 ### Step 3: Install Acadium Agent Publisher
 
-1. Download **[acadium-agent-publisher.zip](https://github.com/Acadium/acadium-agent-publisher/raw/v1.3.0/dist/acadium-agent-publisher.zip)** (version 1.3.0).
+1. Download **[acadium-agent-publisher.zip](https://github.com/Acadium/acadium-agent-publisher/raw/v1.3.1/dist/acadium-agent-publisher.zip)** (version 1.3.1).
 2. In WordPress, go to **Plugins → Add Plugin** ("Add New Plugin" in older versions).
 3. Click **Upload Plugin** at the top, then **Choose File**, and pick `acadium-agent-publisher.zip`.
 4. Click **Install Now**, then **Activate Plugin**.
@@ -117,14 +117,21 @@ To use it, turn the connector on for a chat from the chat's tools menu.
    2. Scroll to **Application Passwords**. Enter a name in *New Application Password Name* (e.g. *Claude Desktop – my laptop*) and click **Add Application Password**.
    3. **Copy the password shown** (it looks like `abcd EFGH 1234 ijkl MNOP 5678`). WordPress shows it only once.
 2. **Install [Node.js](https://nodejs.org)** (LTS version) on your computer, if you haven't already.
-3. **In Claude Desktop,** go to **Settings → Developer → Edit Config**. This opens `claude_desktop_config.json`. Replace its contents with the following, putting in your domain and the password from 1.3 (if the file already has other servers, add `"my-wordpress"` inside the existing `"mcpServers"`):
+3. **Find where `npx` is installed.** Claude Desktop doesn't use your Terminal's settings, so it often can't find Node.js on its own (always, if you installed it with nvm, fnm, Volta or asdf). Give it the full path:
+   - **Mac:** open Terminal and run `which npx`. You'll see something like `/usr/local/bin/npx`, `/opt/homebrew/bin/npx` or `/Users/you/.nvm/versions/node/v24.13.1/bin/npx`.
+   - **Windows:** open Command Prompt and run `where npx`. Use the line ending in `npx.cmd`, e.g. `C:\Program Files\nodejs\npx.cmd` (in the config file, write each `\` as `\\`).
+4. **In Claude Desktop,** go to **Settings → Developer → Edit Config**. This opens `claude_desktop_config.json`. Replace its contents with the following (if the file already has other servers, add `"my-wordpress"` inside the existing `"mcpServers"`). Put in:
+   - `command`: the full `npx` path from step 3.
+   - `PATH`: the folder that path is in (everything before `/npx`), followed by `:/usr/bin:/bin`. `npx` needs it to start Node.js. (Windows: leave the `PATH` line out.)
+   - your domain and the password from 1.3.
    ```json
    {
      "mcpServers": {
        "my-wordpress": {
-         "command": "npx",
+         "command": "/Users/you/.nvm/versions/node/v24.13.1/bin/npx",
          "args": ["-y", "@automattic/mcp-wordpress-remote@latest"],
          "env": {
+           "PATH": "/Users/you/.nvm/versions/node/v24.13.1/bin:/usr/bin:/bin",
            "WP_API_URL": "https://your-site.com/wp-json/acadium-agent-publisher/mcp",
            "WP_API_USERNAME": "claude",
            "WP_API_PASSWORD": "abcd EFGH 1234 ijkl MNOP 5678"
@@ -133,7 +140,7 @@ To use it, turn the connector on for a chat from the chat's tools menu.
      }
    }
    ```
-4. Save the file, **quit Claude Desktop completely**, and open it again.
+5. Save the file, **quit Claude Desktop completely**, and open it again.
 
 #### Option C: Claude Code (Application Password)
 
@@ -286,6 +293,7 @@ add_filter( 'agent_publisher_post_meta', function ( $keys ) {
 
 | Symptom | Fix |
 |---|---|
+| Claude Desktop: "spawn npx ENOENT", `env: node: No such file or directory`, or the server shows as *failed* | Claude Desktop can't find Node.js. Use the full `npx` path as `command` and add its folder to `PATH` in `env` (Option B, steps 3–4). Logs: `~/Library/Logs/Claude/mcp-server-my-wordpress.log` |
 | 401 although the password is right | The server strips `Authorization`. Add `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1` to `.htaccess`; make sure any CDN or proxy forwards the header |
 | No "Application Passwords" section | Use HTTPS, and re-enable Application Passwords in your security plugin or host |
 | 401/403 on all of `/wp-json/` | A "disable REST API" plugin or host rule is blocking it; allow logged-in users |

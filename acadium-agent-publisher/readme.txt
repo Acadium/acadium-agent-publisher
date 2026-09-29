@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.3.0
+Stable tag: 1.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -133,6 +133,9 @@ Your web server may be removing the Authorization header, which is common with A
 
 == Changelog ==
 
+= 1.3.1 =
+* Fix: when no custom fields are enabled, the create, update and update-published tools no longer send an invalid schema. MCP clients such as Claude Desktop skipped those tools, so agents could not create posts.
+
 = 1.3.0 =
 * The MCP Adapter is now built in; the separate MCP Adapter plugin is no longer needed.
 * New MCP endpoint `/wp-json/acadium-agent-publisher/mcp` lists each ability as its own tool. The MCP Adapter default endpoint keeps working, including with OAuth.
@@ -157,6 +160,9 @@ Your web server may be removing the Authorization header, which is common with A
 * First release: list terms, get post, create draft post, update draft post and upload media abilities, plus the AI Agent (drafts only) role.
 
 == Upgrade Notice ==
+
+= 1.3.1 =
+Fixes Claude Desktop not loading the tools that create and edit posts. Reconnect Claude (or restart Claude Desktop) after updating.
 
 = 1.3.0 =
 The MCP Adapter is built in, and the new connection URL is /wp-json/acadium-agent-publisher/mcp. Existing connections keep working.
