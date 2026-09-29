@@ -186,7 +186,7 @@ docker compose run --rm wpcli option get siteurl
 
 ```bash
 docker compose run --rm wpcli plugin install \
-  https://github.com/Acadium/acadium-agent-publisher/raw/v1.3.1/dist/acadium-agent-publisher.zip --activate
+  https://github.com/Acadium/acadium-agent-publisher/raw/v1.4.0/dist/acadium-agent-publisher.zip --activate
 ```
 
 (or upload [`dist/acadium-agent-publisher.zip`](../dist/acadium-agent-publisher.zip) under Plugins → Add New → Upload Plugin.) The MCP Adapter is built in; you don't need to install it separately.

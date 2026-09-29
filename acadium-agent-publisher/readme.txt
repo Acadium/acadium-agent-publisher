@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.3.1
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -55,7 +55,7 @@ Publishing can trigger things that unpublishing cannot undo, such as subscriber 
 * `agent-publisher/get-capabilities` (read-only): what the site allows
 * `agent-publisher/list-terms` (read-only)
 * `agent-publisher/get-post` (read-only)
-* `agent-publisher/create-draft-post`
+* `agent-publisher/create-post` (as a draft, for review, or published in one step with its featured image)
 * `agent-publisher/update-draft-post`
 * `agent-publisher/upload-media`
 * `agent-publisher/submit-for-review`
@@ -133,6 +133,11 @@ Your web server may be removing the Authorization header, which is common with A
 
 == Changelog ==
 
+= 1.4.0 =
+* New `create-post` replaces `create-draft-post`. In one call it creates the post with categories, tags and a featured image (`featured_image` uploads it), and can submit it for review or publish or schedule it when the site mode allows. An agent now needs one approval for a finished post instead of up to three.
+* If a pre-publish check fails, `create-post` creates nothing (including the uploaded image), so the agent can fix its input and try again.
+* Tool descriptions and server instructions no longer tell agents to ask again in chat for something the user already requested.
+
 = 1.3.1 =
 * Fix: when no custom fields are enabled, the create, update and update-published tools no longer send an invalid schema. MCP clients such as Claude Desktop skipped those tools, so agents could not create posts.
 
@@ -160,6 +165,9 @@ Your web server may be removing the Authorization header, which is common with A
 * First release: list terms, get post, create draft post, update draft post and upload media abilities, plus the AI Agent (drafts only) role.
 
 == Upgrade Notice ==
+
+= 1.4.0 =
+create-draft-post is now create-post, which can also publish and set a featured image in one step. Restart Claude Desktop (or reconnect) after updating so it picks up the new tools.
 
 = 1.3.1 =
 Fixes Claude Desktop not loading the tools that create and edit posts. Reconnect Claude (or restart Claude Desktop) after updating.

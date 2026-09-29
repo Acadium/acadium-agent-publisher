@@ -37,7 +37,7 @@ If you skip this, the plugin reminds you after step 3 and offers a one-click **U
 
 ### Step 3: Install Acadium Agent Publisher
 
-1. Download **[acadium-agent-publisher.zip](https://github.com/Acadium/acadium-agent-publisher/raw/v1.3.1/dist/acadium-agent-publisher.zip)** (version 1.3.1).
+1. Download **[acadium-agent-publisher.zip](https://github.com/Acadium/acadium-agent-publisher/raw/v1.4.0/dist/acadium-agent-publisher.zip)** (version 1.4.0).
 2. In WordPress, go to **Plugins → Add Plugin** ("Add New Plugin" in older versions).
 3. Click **Upload Plugin** at the top, then **Choose File**, and pick `acadium-agent-publisher.zip`.
 4. Click **Install Now**, then **Activate Plugin**.
@@ -162,6 +162,10 @@ In a new chat (with the connector turned on), ask:
 
 Then in WordPress, open **Posts → Drafts**. The draft is there, with *Claude* as the author. Review it and click **Publish** yourself, or pick a *Publish* mode in step 5 if you want Claude to publish.
 
+In *Publish* mode, Claude writes and publishes a post, featured image included, in a single step, so you approve it once.
+
+**Fewer approval prompts.** Claude Desktop asks before each tool that changes something; that's a Claude Desktop setting, not something a site can switch off. In Claude Desktop's settings, open the `my-wordpress` server's tool permissions and set the read-only tools (`get-capabilities`, `list-terms`, `get-post`) to **Always allow**. Keep the tools that write or publish on approval: that approval is your chance to check a post before it goes live.
+
 ### Step 9: Keep an eye on it
 
 Everything is under **Settings → Agent Publisher**:
@@ -196,18 +200,18 @@ The settings page also shows setup status (agent users, HTTPS, permalinks, Appli
 
 ## Abilities
 
-Over MCP, each ability is its own tool, named with `-` instead of `/` (e.g. `agent-publisher-create-draft-post`).
+Over MCP, each ability is its own tool, named with `-` instead of `/` (e.g. `agent-publisher-create-post`).
 
 | Ability | Kind | What it does | Mode needed |
 |---|---|---|---|
 | `agent-publisher/get-capabilities` | read | The site's mode, allowed actions and checks. Agents call this first | any |
 | `agent-publisher/list-terms` | read | List categories or tags (id, name, slug, parent, count) | any |
 | `agent-publisher/get-post` | read | Read one of the agent's posts: raw HTML, excerpt, terms, featured image, allowed custom fields | any |
-| `agent-publisher/create-draft-post` | write | Create a post as a **draft**, returning an edit URL | any |
+| `agent-publisher/create-post` | write | Create a post in one call: content, categories, tags and an optional featured image (`featured_image` uploads it). `status`: `draft` (default), `pending` or `publish` (with an optional future `date` to schedule). If a pre-publish check fails, nothing is created | any; `pending` needs Submit for review, `publish` needs Publish |
 | `agent-publisher/update-draft-post` | write | Change a draft or pending post | any |
-| `agent-publisher/upload-media` | write | Add an image from a public https URL or base64, with alt text; optionally a draft's featured image | any |
+| `agent-publisher/upload-media` | write | Add an image from a public https URL or base64, with alt text, for use inside post content; optionally a draft's featured image | any |
 | `agent-publisher/submit-for-review` | write | Draft → *Pending review* | Submit for review |
-| `agent-publisher/publish-post` | write | Publish now, or schedule with a future `date` (ISO 8601) | Publish |
+| `agent-publisher/publish-post` | write | Publish an existing draft now, or schedule it with a future `date` (ISO 8601) | Publish |
 | `agent-publisher/unpublish-post` | write | Published or scheduled → draft (undo) | Publish |
 | `agent-publisher/update-published-post` | write | Change a live post | Publish and edit live posts |
 

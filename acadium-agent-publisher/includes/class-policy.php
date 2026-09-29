@@ -143,7 +143,7 @@ final class Agent_Publisher_Policy {
 		if ( $s['require_featured_image'] ) {
 			$thumb = get_post_thumbnail_id( $post );
 			if ( ! $thumb ) {
-				$problems[] = 'this site requires a featured image (upload one with agent-publisher/upload-media, set_featured: true)';
+				$problems[] = 'this site requires a featured image (pass featured_image to create-post, or use agent-publisher/upload-media with set_featured: true)';
 			} elseif ( '' === trim( (string) get_post_meta( $thumb, '_wp_attachment_image_alt', true ) ) ) {
 				$problems[] = 'the featured image needs alt text';
 			}

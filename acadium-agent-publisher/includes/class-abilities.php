@@ -74,7 +74,7 @@ final class Agent_Publisher_Abilities {
 			'slug'           => array( 'type' => 'string', 'description' => 'Optional URL slug. Generated from the title when omitted.' ),
 			'categories'     => array( 'type' => 'array', 'items' => array( 'type' => 'integer' ), 'description' => 'Category IDs (see agent-publisher/list-terms). Replaces existing categories.' ),
 			'tags'           => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'description' => 'Tag names. Missing tags are created. Replaces existing tags.' ),
-			'featured_media' => array( 'type' => 'integer', 'description' => 'Attachment ID for the featured image (see agent-publisher/upload-media).' ),
+			'featured_media' => array( 'type' => 'integer', 'description' => 'ID of an image already in the Media Library to use as the featured image. To add a new image, use featured_image on create-post, or agent-publisher/upload-media.' ),
 		);
 
 		// Only offer custom fields when a site enables some. An empty
@@ -98,6 +98,20 @@ final class Agent_Publisher_Abilities {
 				'edit_url'    => array( 'type' => 'string', 'description' => 'wp-admin editor URL for a human reviewer.' ),
 				'preview_url' => array( 'type' => 'string', 'description' => 'Preview URL (requires being logged in).' ),
 			),
+		);
+
+		$id_only = array(
+			'type'                 => 'object',
+			'properties'           => array( 'id' => array( 'type' => 'integer', 'description' => 'Post ID.' ) ),
+			'required'             => array( 'id' ),
+			'additionalProperties' => false,
+		);
+		$publish_output = array(
+			'type'       => 'object',
+			'properties' => array_merge( $post_output['properties'], array(
+				'link' => array( 'type' => 'string', 'description' => 'Public URL (for scheduled posts, live from the scheduled time).' ),
+				'date' => array( 'type' => 'string', 'description' => 'Publication date (site time, ISO 8601).' ),
+			) ),
 		);
 
 		wp_register_ability( 'agent-publisher/get-capabilities', array(
@@ -129,7 +143,7 @@ final class Agent_Publisher_Abilities {
 
 		wp_register_ability( 'agent-publisher/list-terms', array(
 			'label'               => __( 'List categories or tags', 'acadium-agent-publisher' ),
-			'description'         => 'Lists existing categories or tags with their IDs, so posts can be filed correctly. Call this before create-draft-post to pick category IDs. Supports a search filter.',
+			'description'         => 'Lists existing categories or tags with their IDs, so posts can be filed correctly. Call this before create-post to pick category IDs. Supports a search filter.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -186,21 +200,50 @@ final class Agent_Publisher_Abilities {
 			'meta'                => self::meta( true, false, true ),
 		) );
 
-		wp_register_ability( 'agent-publisher/create-draft-post', array(
-			'label'               => __( 'Create a draft post', 'acadium-agent-publisher' ),
-			'description'         => 'Creates a new post as a DRAFT. Nothing is published by this call. Afterwards, depending on the site\'s mode (see agent-publisher/get-capabilities), either share the returned edit URL with a human reviewer, call submit-for-review, or call publish-post.',
+		$image_source = array(
+			'url'         => array( 'type' => 'string', 'description' => 'Public https URL of the image. Provide url OR data_base64.' ),
+			'data_base64' => array( 'type' => 'string', 'description' => 'Base64-encoded image bytes. Requires filename.' ),
+			'filename'    => array( 'type' => 'string', 'description' => 'File name with extension, e.g. hero.jpg.' ),
+			'alt_text'    => array( 'type' => 'string', 'description' => 'Describe the image for screen readers. Required.' ),
+			'title'       => array( 'type' => 'string' ),
+			'caption'     => array( 'type' => 'string' ),
+		);
+
+		wp_register_ability( 'agent-publisher/create-post', array(
+			'label'               => __( 'Create a post', 'acadium-agent-publisher' ),
+			'description'         => 'Creates a new post in one call: title, content, categories, tags and optionally a featured image (featured_image uploads it for you). status "draft" (default) saves it for a human to review; "pending" submits it for review; "publish" publishes it now, or schedules it when you pass a future date. Use "pending" or "publish" only when the site mode allows it (see agent-publisher/get-capabilities). When the user asked for the post to be published, pass status "publish" here instead of creating a draft and calling publish-post. For "publish", the site\'s pre-publish checks run first; if any fail, nothing is created and the error says what to fix, so you can correct the input and call again.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array_merge( array(
 					'post_type' => array( 'type' => 'string', 'enum' => $post_types, 'default' => $post_types[0] ),
-				), $post_fields ),
+				), $post_fields, array(
+					'status'         => array( 'type' => 'string', 'enum' => array( 'draft', 'pending', 'publish' ), 'default' => 'draft', 'description' => 'draft (default), pending (submit for review) or publish (publish now, or schedule with date).' ),
+					'date'           => array( 'type' => 'string', 'description' => 'Only with status "publish": future publication time, ISO 8601 (e.g. 2026-10-01T09:00:00-04:00; without an offset the site\'s timezone is used). Omit to publish now.' ),
+					'featured_image' => array(
+						'type'                 => 'object',
+						'description'          => 'Uploads an image and makes it the featured image. Use this or featured_media, not both.',
+						'properties'           => $image_source,
+						'required'             => array( 'alt_text' ),
+						'additionalProperties' => false,
+					),
+				) ),
 				'required'             => array( 'title', 'content' ),
 				'additionalProperties' => false,
 			),
-			'output_schema'       => $post_output,
-			'execute_callback'    => array( __CLASS__, 'create_draft' ),
+			'output_schema'       => $publish_output,
+			'execute_callback'    => array( __CLASS__, 'create_post' ),
 			'permission_callback' => function ( $input ) {
+				$status = $input['status'] ?? 'draft';
+				if ( 'pending' === $status && ! Agent_Publisher_Policy::allows( 'review' ) ) {
+					return Agent_Publisher_Policy::not_allowed( 'submit posts for review', 'review' );
+				}
+				if ( 'publish' === $status && ! Agent_Publisher_Policy::allows( 'publish' ) ) {
+					return Agent_Publisher_Policy::not_allowed( 'publish posts', 'publish' );
+				}
+				if ( ! empty( $input['featured_image'] ) && ! current_user_can( 'upload_files' ) ) {
+					return false;
+				}
 				$type = get_post_type_object( $input['post_type'] ?? self::post_types()[0] );
 				return $type && current_user_can( $type->cap->edit_posts );
 			},
@@ -227,20 +270,6 @@ final class Agent_Publisher_Abilities {
 			'meta'                => self::meta( false, true, false ),
 		) );
 
-		$id_only = array(
-			'type'                 => 'object',
-			'properties'           => array( 'id' => array( 'type' => 'integer', 'description' => 'Post ID.' ) ),
-			'required'             => array( 'id' ),
-			'additionalProperties' => false,
-		);
-		$publish_output = array(
-			'type'       => 'object',
-			'properties' => array_merge( $post_output['properties'], array(
-				'link' => array( 'type' => 'string', 'description' => 'Public URL (for scheduled posts, live from the scheduled time).' ),
-				'date' => array( 'type' => 'string', 'description' => 'Publication date (site time, ISO 8601).' ),
-			) ),
-		);
-
 		wp_register_ability( 'agent-publisher/submit-for-review', array(
 			'label'               => __( 'Submit a draft for review', 'acadium-agent-publisher' ),
 			'description'         => 'Moves one of your drafts to "Pending review" so a site editor can review and publish it. Only when the site mode allows review (see agent-publisher/get-capabilities).',
@@ -259,7 +288,7 @@ final class Agent_Publisher_Abilities {
 
 		wp_register_ability( 'agent-publisher/publish-post', array(
 			'label'               => __( 'Publish or schedule a post', 'acadium-agent-publisher' ),
-			'description'         => 'Publishes one of your drafts (or pending/scheduled posts) now, or schedules it when you pass a future date. Publishing is visible to site visitors and may notify subscribers or social channels, so confirm with the user first. The site\'s pre-publish checks run first (see agent-publisher/get-capabilities); if any fail, nothing changes and the error says what to fix. Only when the site mode allows publishing.',
+			'description'         => 'Publishes one of your existing drafts (or pending/scheduled posts) now, or schedules it when you pass a future date. For a new post, use create-post with status "publish" instead. Publishing is visible to site visitors: go ahead when the user asked you to publish; otherwise ask them first. The site\'s pre-publish checks run first (see agent-publisher/get-capabilities); if any fail, nothing changes and the error says what to fix. Only when the site mode allows publishing.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -299,7 +328,7 @@ final class Agent_Publisher_Abilities {
 
 		wp_register_ability( 'agent-publisher/update-published-post', array(
 			'label'               => __( 'Update a published post', 'acadium-agent-publisher' ),
-			'description'         => 'Changes fields of one of your posts that is already live. Only the fields you pass are changed, and visitors see the change immediately, so confirm with the user first. Only when the site mode is "Publish and edit live posts".',
+			'description'         => 'Changes fields of one of your posts that is already live. Only the fields you pass are changed, and visitors see the change immediately: go ahead when the user asked for the change; otherwise ask them first. Only when the site mode is "Publish and edit live posts".',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -322,20 +351,14 @@ final class Agent_Publisher_Abilities {
 
 		wp_register_ability( 'agent-publisher/upload-media', array(
 			'label'               => __( 'Upload an image', 'acadium-agent-publisher' ),
-			'description'         => 'Adds an image to the Media Library from a public https URL or from base64 data, with alt text. Optionally attaches it to a draft and makes it that draft\'s featured image. Returns the attachment ID and URL to use in post content.',
+			'description'         => 'Adds an image to the Media Library from a public https URL or from base64 data, with alt text, and returns its ID and URL to use in post content (<img src>). For a new post\'s featured image, use featured_image on create-post instead. Optionally attaches the image to an existing draft and makes it that draft\'s featured image.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
-				'properties'           => array(
-					'url'          => array( 'type' => 'string', 'description' => 'Public https URL of the image. Provide url OR data_base64.' ),
-					'data_base64'  => array( 'type' => 'string', 'description' => 'Base64-encoded image bytes. Requires filename.' ),
-					'filename'     => array( 'type' => 'string', 'description' => 'File name with extension, e.g. hero.jpg.' ),
-					'alt_text'     => array( 'type' => 'string', 'description' => 'Describe the image for screen readers. Required.' ),
-					'title'        => array( 'type' => 'string' ),
-					'caption'      => array( 'type' => 'string' ),
+				'properties'           => array_merge( $image_source, array(
 					'post_id'      => array( 'type' => 'integer', 'description' => 'Optional draft to attach the image to.' ),
 					'set_featured' => array( 'type' => 'boolean', 'default' => false, 'description' => 'Make it the featured image of post_id.' ),
-				),
+				) ),
 				'required'             => array( 'alt_text' ),
 				'additionalProperties' => false,
 			),
@@ -498,22 +521,85 @@ final class Agent_Publisher_Abilities {
 		return $out;
 	}
 
-	public static function create_draft( $input ) {
+	public static function create_post( $input ) {
+		$status = $input['status'] ?? 'draft';
+		if ( ! empty( $input['date'] ) && 'publish' !== $status ) {
+			return new WP_Error( 'agent_publisher_date_needs_publish', 'date is only used with status "publish".', array( 'status' => 400 ) );
+		}
+		if ( ! empty( $input['featured_image'] ) && isset( $input['featured_media'] ) ) {
+			return new WP_Error( 'agent_publisher_two_images', 'Pass featured_image or featured_media, not both.', array( 'status' => 400 ) );
+		}
 		$valid = self::validate_extras( $input );
 		if ( is_wp_error( $valid ) ) {
 			return $valid;
 		}
+		$dates = null;
+		if ( 'publish' === $status ) {
+			$dates = self::publish_dates( $input['date'] ?? '' );
+			if ( is_wp_error( $dates ) ) {
+				return $dates;
+			}
+		}
+
+		// Upload first, so a failed download leaves nothing behind.
+		$uploaded = 0;
+		if ( ! empty( $input['featured_image'] ) ) {
+			$uploaded = self::sideload_image( $input['featured_image'], 0 );
+			if ( is_wp_error( $uploaded ) ) {
+				return $uploaded;
+			}
+		}
+		$image = $uploaded ? $uploaded : (int) ( $input['featured_media'] ?? 0 );
+
 		$postarr = self::postarr( $input );
 		$postarr['post_type']   = $input['post_type'] ?? self::post_types()[0];
-		$postarr['post_status'] = 'draft';
+		$postarr['post_status'] = 'pending' === $status ? 'pending' : 'draft';
 		$postarr['post_author'] = get_current_user_id();
+		if ( isset( $input['categories'] ) ) {
+			$postarr['post_category'] = array_map( 'intval', $input['categories'] );
+		}
 
 		$id = wp_insert_post( wp_slash( $postarr ), true );
 		if ( is_wp_error( $id ) ) {
+			if ( $uploaded ) {
+				wp_delete_attachment( $uploaded, true );
+			}
 			return $id;
 		}
+		if ( $uploaded ) {
+			wp_update_post( array( 'ID' => $uploaded, 'post_parent' => $id ) );
+		}
+		if ( $image ) {
+			set_post_thumbnail( $id, $image );
+		}
+
+		if ( 'publish' === $status ) {
+			$checks = Agent_Publisher_Policy::check_publishable( get_post( $id ) );
+			if ( is_wp_error( $checks ) ) {
+				// Undo, so the agent can fix its input and call again without leaving a stray draft.
+				wp_delete_post( $id, true );
+				if ( $uploaded ) {
+					wp_delete_attachment( $uploaded, true );
+				}
+				return new WP_Error(
+					$checks->get_error_code(),
+					str_replace( 'The post was left unchanged.', 'Nothing was created.', $checks->get_error_message() ),
+					$checks->get_error_data()
+				);
+			}
+		}
+
 		self::save_extras( $id, $input );
 		Agent_Publisher_Policy::log( 'create', $id );
+		if ( $uploaded ) {
+			Agent_Publisher_Policy::log( 'upload', $id, wp_get_attachment_url( $uploaded ) );
+		}
+		if ( 'pending' === $status ) {
+			Agent_Publisher_Policy::log( 'submit', $id );
+		}
+		if ( 'publish' === $status ) {
+			return self::apply_publish( get_post( $id ), $dates );
+		}
 		return self::summary( get_post( $id ) );
 	}
 
@@ -569,20 +655,9 @@ final class Agent_Publisher_Abilities {
 			return new WP_Error( 'agent_publisher_bad_status', sprintf( 'Post %d is "%s" and cannot be published by an agent.', $post->ID, $post->post_status ), array( 'status' => 409 ) );
 		}
 
-		$postarr = array( 'ID' => $post->ID, 'post_status' => 'publish', 'edit_date' => true );
-		if ( ! empty( $input['date'] ) ) {
-			$dates = rest_get_date_with_gmt( $input['date'] );
-			if ( ! $dates ) {
-				return new WP_Error( 'agent_publisher_bad_date', 'date must be ISO 8601, e.g. 2026-10-01T09:00:00-04:00.', array( 'status' => 400 ) );
-			}
-			if ( strtotime( $dates[1] . ' UTC' ) <= time() + MINUTE_IN_SECONDS ) {
-				return new WP_Error( 'agent_publisher_past_date', 'date must be in the future. Omit it to publish now.', array( 'status' => 400 ) );
-			}
-			$postarr['post_date']     = $dates[0];
-			$postarr['post_date_gmt'] = $dates[1];
-		} else {
-			$postarr['post_date']     = current_time( 'mysql' );
-			$postarr['post_date_gmt'] = current_time( 'mysql', true );
+		$dates = self::publish_dates( $input['date'] ?? '' );
+		if ( is_wp_error( $dates ) ) {
+			return $dates;
 		}
 
 		// Rescheduling an already scheduled post doesn't count toward the daily limit again.
@@ -590,8 +665,33 @@ final class Agent_Publisher_Abilities {
 		if ( is_wp_error( $checks ) ) {
 			return $checks;
 		}
+		return self::apply_publish( $post, $dates );
+	}
 
-		$id = wp_update_post( $postarr, true );
+	/** [ local, gmt ] publication dates: now, or a future ISO 8601 time. */
+	private static function publish_dates( $date ) {
+		if ( '' === (string) $date ) {
+			return array( current_time( 'mysql' ), current_time( 'mysql', true ) );
+		}
+		$dates = rest_get_date_with_gmt( $date );
+		if ( ! $dates ) {
+			return new WP_Error( 'agent_publisher_bad_date', 'date must be ISO 8601, e.g. 2026-10-01T09:00:00-04:00.', array( 'status' => 400 ) );
+		}
+		if ( strtotime( $dates[1] . ' UTC' ) <= time() + MINUTE_IN_SECONDS ) {
+			return new WP_Error( 'agent_publisher_past_date', 'date must be in the future. Omit it to publish now.', array( 'status' => 400 ) );
+		}
+		return $dates;
+	}
+
+	/** Publish (or schedule, for a future date) a post that passed the pre-publish checks. */
+	private static function apply_publish( $post, $dates ) {
+		$id = wp_update_post( array(
+			'ID'            => $post->ID,
+			'post_status'   => 'publish',
+			'edit_date'     => true,
+			'post_date'     => $dates[0],
+			'post_date_gmt' => $dates[1],
+		), true );
 		if ( is_wp_error( $id ) ) {
 			return $id;
 		}
@@ -646,6 +746,33 @@ final class Agent_Publisher_Abilities {
 	}
 
 	public static function upload_media( $input ) {
+		$post_id = (int) ( $input['post_id'] ?? 0 );
+		$id      = self::sideload_image( $input, $post_id );
+		if ( is_wp_error( $id ) ) {
+			return $id;
+		}
+		if ( $post_id && ! empty( $input['set_featured'] ) ) {
+			set_post_thumbnail( $post_id, $id );
+		}
+		Agent_Publisher_Policy::log( 'upload', $post_id, wp_get_attachment_url( $id ) );
+
+		$src = wp_get_attachment_image_src( $id, 'full' );
+		return array(
+			'id'     => (int) $id,
+			'url'    => wp_get_attachment_url( $id ),
+			'width'  => (int) ( $src[1] ?? 0 ),
+			'height' => (int) ( $src[2] ?? 0 ),
+			'mime'   => get_post_mime_type( $id ),
+		);
+	}
+
+	/**
+	 * Download (https URL) or decode (base64) an image, check its size and real
+	 * type, and add it to the Media Library with alt text.
+	 *
+	 * @return int|WP_Error Attachment ID.
+	 */
+	private static function sideload_image( $input, $post_id ) {
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/media.php';
 		require_once ABSPATH . 'wp-admin/includes/image.php';
@@ -702,8 +829,7 @@ final class Agent_Publisher_Abilities {
 			$name = $check['proper_filename'];
 		}
 
-		$post_id = (int) ( $input['post_id'] ?? 0 );
-		$id      = media_handle_sideload(
+		$id = media_handle_sideload(
 			array( 'name' => sanitize_file_name( $name ), 'tmp_name' => $tmp ),
 			$post_id,
 			null,
@@ -719,20 +845,7 @@ final class Agent_Publisher_Abilities {
 
 		update_post_meta( $id, '_wp_attachment_image_alt', sanitize_text_field( $input['alt_text'] ) );
 
-		if ( $post_id && ! empty( $input['set_featured'] ) ) {
-			set_post_thumbnail( $post_id, $id );
-		}
-
-		Agent_Publisher_Policy::log( 'upload', $post_id, wp_get_attachment_url( $id ) );
-
-		$src = wp_get_attachment_image_src( $id, 'full' );
-		return array(
-			'id'     => (int) $id,
-			'url'    => wp_get_attachment_url( $id ),
-			'width'  => (int) ( $src[1] ?? 0 ),
-			'height' => (int) ( $src[2] ?? 0 ),
-			'mime'   => get_post_mime_type( $id ),
-		);
+		return (int) $id;
 	}
 
 	/* ------------------------------------------------------------------ */
