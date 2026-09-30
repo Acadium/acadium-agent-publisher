@@ -323,6 +323,50 @@ Revoke the Application Password (Users > agent > Application Passwords), disconn
 - Package for WordPress.org or manual install: `bin/build-zip.sh` installs the Composer dependencies (with Docker) and writes `dist/acadium-agent-publisher.zip`. It checks that the plugin header version matches the readme's `Stable tag`.
 - Before a release, run the official [Plugin Check](https://wordpress.org/plugins/plugin-check/) plugin (`wp plugin check acadium-agent-publisher`).
 
+## Releasing to WordPress.org
+
+The plugin is approved in the WordPress.org Plugin Directory under the slug `acadium-agent-publisher`. The directory serves whatever is committed to its SVN repository:
+
+| | |
+|---|---|
+| SVN repository | <https://plugins.svn.wordpress.org/acadium-agent-publisher> |
+| Public page | <https://wordpress.org/plugins/acadium-agent-publisher> |
+| SVN username | `anselbrandt`: the WordPress.org username, not the email, and case-sensitive |
+| SVN password | Separate from the WordPress.org login password. Set it at [Account & Security → SVN password](https://profiles.wordpress.org/me/profile/edit/group/3/?screen=svn-password) |
+
+GitHub is where development happens. SVN is a release channel: commit **only finished versions**, and commit the **built zip**, because `vendor/` isn't in Git.
+
+**Before each release**
+1. Bump `Version:` and `AGENT_PUBLISHER_VERSION` in `acadium-agent-publisher.php`, and `Stable tag:` in `readme.txt`. Add a Changelog entry and an Upgrade Notice.
+2. Run Plugin Check. Make sure admin screens and form handlers use nonces, sanitize input and escape output: that's what reviewers and security scanners look for.
+3. Run `bin/build-zip.sh`, test the zip on a real site, then commit, tag `vX.Y.Z` and push to GitHub.
+
+**Commit to SVN** (install the client with `brew install subversion`):
+
+```bash
+V=1.4.0
+SVN=~/work/acadium/aap-svn
+# First time: svn co https://plugins.svn.wordpress.org/acadium-agent-publisher "$SVN"
+svn up "$SVN"
+
+# Replace trunk with the contents of the built zip.
+T=$(mktemp -d) && unzip -q dist/acadium-agent-publisher.zip -d "$T"
+rsync -a --delete --exclude .DS_Store "$T/acadium-agent-publisher/" "$SVN/trunk/"
+cd "$SVN"
+svn add --force --quiet trunk                                   # new files
+svn status trunk | awk '/^!/ {print $2}' | while read -r f; do svn rm -q "$f"; done   # removed files
+svn cp trunk "tags/$V"
+
+svn status | less                                               # review before committing
+svn ci -m "Release $V" --username anselbrandt
+```
+
+The directory serves `tags/<Stable tag>/`, so the tag and `Stable tag:` must match. The page updates within minutes. Search results and author profiles can take up to 72 hours.
+
+**Directory page assets** (icon, banner, screenshots) go in `assets/` at the repository root, not in `trunk/`. For example: `icon-256x256.png`, `banner-772x250.png`, `screenshot-1.png`. See [Plugin Assets](https://developer.wordpress.org/plugins/wordpress-org/plugin-assets/). `readme.txt` controls the page text; check it with the [readme validator](https://wordpress.org/plugins/developers/readme-validator/).
+
+**Staying listed:** keep `plugins@wordpress.org` whitelisted, because they close plugins they can't reach. Follow the [Plugin Guidelines](https://developer.wordpress.org/plugins/wordpress-org/detailed-plugin-guidelines/). Live plugins are reviewed at any time, including by automated security scanners.
+
 ## License
 
 GPL-2.0-or-later. See [LICENSE](LICENSE).
