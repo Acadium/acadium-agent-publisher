@@ -33,12 +33,16 @@ final class Agent_Publisher_OAuth_Server {
 	/** Set when a request carried a bearer token that was not accepted. */
 	private static $invalid_token = false;
 
+	/** User authenticated by a bearer token in this request (0 if none). */
+	private static $bearer_user = 0;
+
 	public static function init() {
 		add_action( 'plugins_loaded', array( 'Agent_Publisher_OAuth_Store', 'maybe_install' ) );
 		add_action( 'parse_request', array( __CLASS__, 'route' ), 0 );
 		add_action( 'deleted_user', array( 'Agent_Publisher_OAuth_Store', 'revoke_user' ) );
 		add_filter( 'determine_current_user', array( __CLASS__, 'bearer_user' ), 30 );
 		add_filter( 'rest_post_dispatch', array( __CLASS__, 'challenge' ), 10, 3 );
+		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'restrict_token_routes' ), 0, 3 );
 		add_action( 'admin_post_agent_publisher_revoke_grant', array( __CLASS__, 'admin_revoke_grant' ) );
 	}
 
@@ -54,36 +58,54 @@ final class Agent_Publisher_OAuth_Server {
 		if ( $user_id || ! self::enabled() ) {
 			return $user_id;
 		}
+		// Tokens are for REST requests only: never wp-admin, admin-ajax,
+		// admin-post, cron or XML-RPC, and never a route smuggled in a POST body.
+		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() || ( defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST ) || isset( $_POST['rest_route'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- presence check only.
+			return $user_id;
+		}
 		$header = self::authorization_header();
 		if ( 0 !== stripos( $header, 'Bearer ' ) || ! self::is_protected_request() ) {
 			return $user_id;
 		}
 		$token_user = Agent_Publisher_OAuth_Store::user_for_access_token( trim( substr( $header, 7 ) ) );
 		$user       = $token_user ? get_userdata( $token_user ) : false;
-		if ( $user && in_array( Agent_Publisher_Policy::ROLE, (array) $user->roles, true ) ) {
+		if ( $user && Agent_Publisher_Policy::is_agent_user( $user ) ) {
+			self::$bearer_user = $user->ID;
 			return $user->ID;
 		}
 		self::$invalid_token = true;
 		return $user_id;
 	}
 
-	/** Is this a REST request to the MCP Adapter or the Abilities API? */
-	private static function is_protected_request() {
-		$routes = array( '/mcp/', '/wp-abilities/', '/' . Agent_Publisher_MCP_Server::NS . '/' );
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check.
-		$route = isset( $_GET['rest_route'] ) ? sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ) : '';
-		if ( '' === $route && isset( $_SERVER['REQUEST_URI'] ) ) {
-			$path   = (string) wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH );
-			$prefix = '/' . trim( rest_get_url_prefix(), '/' );
-			$pos    = strpos( $path, $prefix . '/' );
-			$route  = false === $pos ? '' : substr( $path, $pos + strlen( $prefix ) );
+	/** Authoritative check on the route WordPress actually dispatches (batch sub-requests included). */
+	public static function restrict_token_routes( $result, $server, $request ) {
+		if ( self::$bearer_user && get_current_user_id() === self::$bearer_user && ! self::route_is_protected( $request->get_route() ) ) {
+			return new WP_Error( 'rest_forbidden', 'This access token is only valid for the MCP and Abilities endpoints.', array( 'status' => 403 ) );
 		}
-		foreach ( $routes as $r ) {
-			if ( 0 === strpos( $route, $r ) ) {
+		return $result;
+	}
+
+	private static function route_is_protected( $route ) {
+		foreach ( array( '/mcp/', '/wp-abilities/', '/' . Agent_Publisher_MCP_Server::NS . '/' ) as $prefix ) {
+			if ( 0 === strpos( (string) $route, $prefix ) ) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/** Is this a REST request to the MCP Adapter or the Abilities API? */
+	private static function is_protected_request() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check.
+		$route = isset( $_GET['rest_route'] ) ? sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ) : '';
+		if ( '' === $route && isset( $_SERVER['REQUEST_URI'] ) ) {
+			// The path must start with the REST base (e.g. /wp-json/), not merely contain it.
+			$path  = (string) wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH );
+			$base  = untrailingslashit( (string) wp_parse_url( rest_url(), PHP_URL_PATH ) );
+			$route = 0 === strpos( $path, $base . '/' ) ? substr( $path, strlen( $base ) ) : '';
+		}
+		// restrict_token_routes() re-checks the route that is actually dispatched.
+		return self::route_is_protected( $route );
 	}
 
 	/**
@@ -233,9 +255,9 @@ final class Agent_Publisher_OAuth_Server {
 		if ( 'POST' !== self::method() ) {
 			self::oauth_error( 'invalid_request', 'Use POST.', 405 );
 		}
-		self::rate_limit( 'register', 20, HOUR_IN_SECONDS );
+		self::rate_limit( 'register', 30, HOUR_IN_SECONDS, self::client_ip() );
 
-		$body = json_decode( (string) file_get_contents( 'php://input' ), true );
+		$body = json_decode( (string) file_get_contents( 'php://input' ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- JSON request body (RFC 7591).
 		if ( ! is_array( $body ) ) {
 			self::oauth_error( 'invalid_client_metadata', 'Request body must be a JSON object.' );
 		}
@@ -255,12 +277,12 @@ final class Agent_Publisher_OAuth_Server {
 			self::oauth_error( 'invalid_client_metadata', 'Unsupported token_endpoint_auth_method.' );
 		}
 		$grants = isset( $body['grant_types'] ) && is_array( $body['grant_types'] ) ? $body['grant_types'] : array( 'authorization_code', 'refresh_token' );
-		if ( array_diff( $grants, array( 'authorization_code', 'refresh_token' ) ) ) {
+		if ( array_filter( $grants, 'is_string' ) !== $grants || array_diff( $grants, array( 'authorization_code', 'refresh_token' ) ) ) {
 			self::oauth_error( 'invalid_client_metadata', 'Only the authorization_code and refresh_token grants are supported.' );
 		}
 
-		$name   = isset( $body['client_name'] ) ? sanitize_text_field( (string) $body['client_name'] ) : '';
-		$name   = '' !== $name ? substr( $name, 0, 100 ) : wp_parse_url( $uris[0], PHP_URL_HOST );
+		$name   = isset( $body['client_name'] ) && is_string( $body['client_name'] ) ? sanitize_text_field( $body['client_name'] ) : '';
+		$name   = '' !== $name ? mb_substr( $name, 0, 100 ) : wp_parse_url( $uris[0], PHP_URL_HOST );
 		$client = Agent_Publisher_OAuth_Store::create_client( $name, $uris, $method );
 
 		$response = array(
@@ -324,17 +346,19 @@ final class Agent_Publisher_OAuth_Server {
 			self::page_error( __( 'The app sent a redirect address that does not match its registration.', 'acadium-agent-publisher' ) );
 		}
 
+		// Invalid requests get an error page, not a redirect: redirecting before an
+		// administrator has seen the consent screen would make this an open redirect.
 		$state = self::raw_param( 'state' );
 		if ( 'code' !== self::param( 'response_type' ) ) {
-			self::redirect_error( $redirect_uri, 'unsupported_response_type', 'Only response_type=code is supported.', $state );
+			self::page_error( __( 'The app sent an unsupported request (response_type must be "code").', 'acadium-agent-publisher' ) );
 		}
 		$challenge = self::param( 'code_challenge' );
 		if ( ! preg_match( '/^[A-Za-z0-9_-]{43,128}$/', $challenge ) || 'S256' !== self::param( 'code_challenge_method' ) ) {
-			self::redirect_error( $redirect_uri, 'invalid_request', 'PKCE with code_challenge_method=S256 is required.', $state );
+			self::page_error( __( 'The app did not use PKCE (S256), which this site requires.', 'acadium-agent-publisher' ) );
 		}
 		$resource = self::raw_param( 'resource' );
 		if ( '' !== $resource && ! self::resource_ok( $resource ) ) {
-			self::redirect_error( $redirect_uri, 'invalid_target', 'Unknown resource.', $state );
+			self::page_error( __( 'The app asked for access to an unknown address on this site.', 'acadium-agent-publisher' ) );
 		}
 
 		if ( ! is_user_logged_in() ) {
@@ -345,7 +369,7 @@ final class Agent_Publisher_OAuth_Server {
 			self::page_error( __( 'Only a site administrator can approve a connection. Log in as an administrator and try again.', 'acadium-agent-publisher' ) );
 		}
 
-		$agents = get_users( array( 'role' => Agent_Publisher_Policy::ROLE, 'orderby' => 'display_name' ) );
+		$agents = array_values( array_filter( get_users( array( 'role' => Agent_Publisher_Policy::ROLE, 'orderby' => 'display_name' ) ), array( 'Agent_Publisher_Policy', 'is_agent_user' ) ) );
 
 		if ( 'POST' === self::method() ) {
 			if ( ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ), 'agent_publisher_authorize_' . $client_id ) ) {
@@ -355,7 +379,7 @@ final class Agent_Publisher_OAuth_Server {
 				self::redirect_error( $redirect_uri, 'access_denied', 'The administrator denied the request.', $state );
 			}
 			$agent = get_userdata( absint( self::param( 'agent_user' ) ) );
-			if ( ! $agent || ! in_array( Agent_Publisher_Policy::ROLE, (array) $agent->roles, true ) ) {
+			if ( ! $agent || ! Agent_Publisher_Policy::is_agent_user( $agent ) ) {
 				self::page_error( __( 'Choose a user with the AI Agent role.', 'acadium-agent-publisher' ) );
 			}
 			$code = Agent_Publisher_OAuth_Store::create_code( $client_id, $agent->ID, array(
@@ -445,19 +469,39 @@ ul{padding-left:20px}select{width:100%;padding:6px;font-size:15px;margin:6px 0 1
 		self::page_close();
 	}
 
+	/** Is the redirect host a known Claude address (or localhost, for Claude Desktop/Code)? */
+	private static function host_trusted( $host ) {
+		$hosts = (array) apply_filters( 'agent_publisher_oauth_trusted_hosts', array( 'claude.ai', 'claude.com', 'localhost', '127.0.0.1', '[::1]' ) );
+		foreach ( $hosts as $trusted ) {
+			if ( $host === $trusted || substr( $host, -strlen( '.' . $trusted ) ) === '.' . $trusted ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private static function consent_page( array $client, $redirect_uri, array $agents ) {
 		$labels = Agent_Publisher_Policy::mode_labels();
 		$mode   = Agent_Publisher_Policy::mode();
-		$host   = wp_parse_url( $redirect_uri, PHP_URL_HOST );
+		$host    = (string) wp_parse_url( $redirect_uri, PHP_URL_HOST );
+		$trusted = self::host_trusted( $host );
 		/* translators: 1: app name, 2: site name. */
 		self::page_open( sprintf( __( 'Connect %1$s to %2$s', 'acadium-agent-publisher' ), $client['data']['name'], get_bloginfo( 'name' ) ) );
 		?>
 		<h1>
 			<?php
-			/* translators: 1: app name, 2: site name. */
-			echo esc_html( sprintf( __( 'Allow %1$s to work on %2$s?', 'acadium-agent-publisher' ), $client['data']['name'], get_bloginfo( 'name' ) ) );
+			/* translators: 1: app name as the app describes itself, 2: the app's web address (e.g. claude.ai), 3: site name. */
+			echo esc_html( sprintf( __( 'Allow "%1$s" (%2$s) to work on %3$s?', 'acadium-agent-publisher' ), $client['data']['name'], $host, get_bloginfo( 'name' ) ) );
 			?>
 		</h1>
+		<?php if ( ! $trusted ) : ?>
+			<div class="warn">
+				<?php
+				/* translators: %s: host name, e.g. example.com */
+				echo esc_html( sprintf( __( 'Unverified app: %s is not a known Claude address. Only continue if you started this connection yourself and recognize this address.', 'acadium-agent-publisher' ), $host ) );
+				?>
+			</div>
+		<?php endif; ?>
 		<p class="muted">
 			<?php
 			/* translators: %s: host name the app redirects to, e.g. claude.ai */
@@ -465,7 +509,7 @@ ul{padding-left:20px}select{width:100%;padding:6px;font-size:15px;margin:6px 0 1
 			?>
 		</p>
 		<?php if ( ! $agents ) : ?>
-			<div class="warn"><?php esc_html_e( 'There is no user with the AI Agent role yet. Create one under Users > Add New User, then connect again.', 'acadium-agent-publisher' ); ?></div>
+			<div class="warn"><?php esc_html_e( 'There is no user with the AI Agent role yet. Click "Create AI Agent user" under Settings > Agent Publisher, then connect again.', 'acadium-agent-publisher' ); ?></div>
 			<?php self::page_close(); ?>
 		<?php endif; ?>
 		<p><?php esc_html_e( 'It will act as an AI Agent user, not as you, and can:', 'acadium-agent-publisher' ); ?></p>
@@ -519,10 +563,10 @@ ul{padding-left:20px}select{width:100%;padding:6px;font-size:15px;margin:6px 0 1
 		if ( 'POST' !== self::method() ) {
 			self::oauth_error( 'invalid_request', 'Use POST.', 405 );
 		}
-		self::rate_limit( 'token', 120, 10 * MINUTE_IN_SECONDS );
-
 		$client = self::authenticate_client();
-		$grant  = self::param( 'grant_type' );
+		// Per client, not per IP: behind a proxy or CDN every caller shares one IP.
+		self::rate_limit( 'token', 120, 10 * MINUTE_IN_SECONDS, $client['client_id'] );
+		$grant = self::param( 'grant_type' );
 
 		if ( 'authorization_code' === $grant ) {
 			$row = Agent_Publisher_OAuth_Store::consume_code( self::param( 'code' ) );
@@ -561,9 +605,9 @@ ul{padding-left:20px}select{width:100%;padding:6px;font-size:15px;margin:6px 0 1
 		if ( 'POST' !== self::method() ) {
 			self::oauth_error( 'invalid_request', 'Use POST.', 405 );
 		}
-		self::rate_limit( 'token', 120, 10 * MINUTE_IN_SECONDS );
-		self::authenticate_client();
-		Agent_Publisher_OAuth_Store::revoke_token( self::param( 'token' ) );
+		$client = self::authenticate_client();
+		self::rate_limit( 'revoke', 120, 10 * MINUTE_IN_SECONDS, $client['client_id'] );
+		Agent_Publisher_OAuth_Store::revoke_token( self::param( 'token' ), $client['client_id'] );
 		self::json( new stdClass() ); // RFC 7009: 200 whether or not the token existed.
 	}
 
@@ -575,7 +619,7 @@ ul{padding-left:20px}select{width:100%;padding:6px;font-size:15px;margin:6px 0 1
 		$secret    = self::raw_param( 'client_secret' );
 		$header    = self::authorization_header();
 		if ( 0 === stripos( $header, 'Basic ' ) ) {
-			$decoded = base64_decode( substr( $header, 6 ), true );
+			$decoded = base64_decode( substr( $header, 6 ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- HTTP Basic client authentication (RFC 6749 2.3.1).
 			if ( false !== $decoded && false !== strpos( $decoded, ':' ) ) {
 				list( $client_id, $secret ) = array_map( 'rawurldecode', explode( ':', $decoded, 2 ) );
 			}
@@ -590,7 +634,7 @@ ul{padding-left:20px}select{width:100%;padding:6px;font-size:15px;margin:6px 0 1
 
 	private static function require_agent( $user_id ) {
 		$user = get_userdata( $user_id );
-		if ( ! $user || ! in_array( Agent_Publisher_Policy::ROLE, (array) $user->roles, true ) ) {
+		if ( ! $user || ! Agent_Publisher_Policy::is_agent_user( $user ) ) {
 			self::oauth_error( 'invalid_grant', 'The connected user no longer has the AI Agent role.' );
 		}
 	}
@@ -640,10 +684,18 @@ ul{padding-left:20px}select{width:100%;padding:6px;font-size:15px;margin:6px 0 1
 		self::json( array_filter( array( 'error' => $error, 'error_description' => $description ) ), $status );
 	}
 
-	/** Simple per-IP throttle for unauthenticated endpoints. */
-	private static function rate_limit( $bucket, $max, $window ) {
-		$ip  = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
-		$key = 'agent_publisher_rl_' . md5( $bucket . '|' . $ip );
+	/**
+	 * The caller's IP for rate limiting. Behind a proxy or CDN, REMOTE_ADDR is
+	 * the proxy; sites can supply the real client IP with this filter.
+	 */
+	private static function client_ip() {
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		return (string) apply_filters( 'agent_publisher_client_ip', $ip );
+	}
+
+	/** Simple throttle: $max requests per $window per bucket and key (IP or client ID). */
+	private static function rate_limit( $bucket, $max, $window, $who ) {
+		$key = 'agent_publisher_rl_' . md5( $bucket . '|' . $who );
 		$n   = (int) get_transient( $key );
 		if ( $n >= $max ) {
 			header( 'Retry-After: ' . (int) $window );

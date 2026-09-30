@@ -1,7 +1,8 @@
 <?php
 /**
- * Settings > Agent Publisher: publishing mode, pre-publish checks, setup
- * status and recent agent activity.
+ * Settings > Agent Publisher: "Connect Claude" setup (class-setup.php),
+ * publishing mode, pre-publish checks, connected apps and recent agent
+ * activity.
  *
  * Uses the Settings API (options.php handles the nonce and capability check;
  * Agent_Publisher_Policy::sanitize() cleans the input).
@@ -36,7 +37,7 @@ final class Agent_Publisher_Settings_Page {
 			return;
 		}
 		?>
-		<div class="notice notice-warning">
+		<div class="notice notice-warning" id="agent-publisher-permalinks-notice">
 			<p>
 				<strong><?php esc_html_e( 'Acadium Agent Publisher needs pretty permalinks.', 'acadium-agent-publisher' ); ?></strong>
 				<?php esc_html_e( 'AI apps such as Claude cannot connect while this site uses "Plain" permalinks. Switching to "Post name" changes post links to example.com/sample-post/; old links keep working.', 'acadium-agent-publisher' ); ?>
@@ -110,12 +111,14 @@ final class Agent_Publisher_Settings_Page {
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Agent Publisher', 'acadium-agent-publisher' ); ?></h1>
-			<p><?php esc_html_e( 'Rules for AI agents (such as Claude) that work on this site through the Abilities API or MCP. They apply to every user with the AI Agent role.', 'acadium-agent-publisher' ); ?></p>
+			<p><?php esc_html_e( 'Lets Claude write and publish posts on this site, within the rules below. The rules apply to every user with the AI Agent role.', 'acadium-agent-publisher' ); ?></p>
+
+			<?php Agent_Publisher_Setup::render(); ?>
 
 			<form method="post" action="options.php">
 				<?php settings_fields( self::GROUP ); ?>
 
-				<h2><?php esc_html_e( 'What agents may do', 'acadium-agent-publisher' ); ?></h2>
+				<h2 id="agent-publisher-mode"><?php esc_html_e( 'What agents may do', 'acadium-agent-publisher' ); ?></h2>
 				<fieldset>
 					<legend class="screen-reader-text"><?php esc_html_e( 'Publishing mode', 'acadium-agent-publisher' ); ?></legend>
 					<?php foreach ( Agent_Publisher_Policy::MODES as $mode ) : ?>
@@ -179,7 +182,7 @@ final class Agent_Publisher_Settings_Page {
 					</tr>
 				</table>
 
-				<h2><?php esc_html_e( 'Connections from claude.ai and mobile apps', 'acadium-agent-publisher' ); ?></h2>
+				<h2><?php esc_html_e( 'Connector sign-in (OAuth)', 'acadium-agent-publisher' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
 						<th scope="row"><?php esc_html_e( 'OAuth', 'acadium-agent-publisher' ); ?></th>
@@ -188,7 +191,7 @@ final class Agent_Publisher_Settings_Page {
 								<input type="checkbox" name="<?php echo esc_attr( $name ); ?>[oauth_enabled]" value="1" <?php checked( $s['oauth_enabled'] ); ?> />
 								<?php esc_html_e( 'Allow OAuth connections', 'acadium-agent-publisher' ); ?>
 							</label>
-							<p class="description"><?php esc_html_e( 'Lets you add this site as a custom connector in claude.ai (web, desktop and mobile apps) without an Application Password. Each connection must be approved by an administrator, who picks the AI Agent user it acts as.', 'acadium-agent-publisher' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Lets you add this site as a custom connector in Claude Desktop, claude.ai and the Claude mobile apps, without an Application Password. Each connection must be approved by an administrator, who picks the AI Agent user it acts as.', 'acadium-agent-publisher' ); ?></p>
 							<?php if ( $s['oauth_enabled'] ) : ?>
 								<p><?php esc_html_e( 'Connector URL:', 'acadium-agent-publisher' ); ?> <code><?php echo esc_html( Agent_Publisher_OAuth_Server::resource() ); ?></code></p>
 							<?php endif; ?>
@@ -200,7 +203,6 @@ final class Agent_Publisher_Settings_Page {
 			</form>
 
 			<?php self::render_connections( $s ); ?>
-			<?php self::render_status(); ?>
 			<?php self::render_activity(); ?>
 		</div>
 		<?php
@@ -226,7 +228,7 @@ final class Agent_Publisher_Settings_Page {
 			<p class="description"><?php esc_html_e( 'OAuth connections are turned off, so these apps cannot access the site until you turn them back on.', 'acadium-agent-publisher' ); ?></p>
 		<?php endif; ?>
 		<?php if ( ! $grants ) : ?>
-			<p><?php esc_html_e( 'No apps connected yet. In claude.ai, open Settings > Connectors > Add custom connector and enter the connector URL above.', 'acadium-agent-publisher' ); ?></p>
+			<p><?php esc_html_e( 'No apps connected yet. See "Connect Claude" at the top of this page.', 'acadium-agent-publisher' ); ?></p>
 			<?php return; ?>
 		<?php endif; ?>
 		<table class="widefat striped" style="max-width:60em;">
@@ -260,63 +262,6 @@ final class Agent_Publisher_Settings_Page {
 						</td>
 					</tr>
 				<?php endforeach; ?>
-			</tbody>
-		</table>
-		<?php
-	}
-
-	private static function render_status() {
-		$agents   = get_users( array( 'role' => Agent_Publisher_Policy::ROLE, 'fields' => array( 'ID', 'user_login', 'display_name' ) ) );
-		$mcp      = class_exists( 'WP\MCP\Core\McpAdapter' );
-		$app_pw   = function_exists( 'wp_is_application_passwords_available' ) && wp_is_application_passwords_available();
-		$endpoint = Agent_Publisher_MCP_Server::url();
-		$yes      = esc_html__( 'Yes', 'acadium-agent-publisher' );
-		$no       = esc_html__( 'No', 'acadium-agent-publisher' );
-		?>
-		<h2><?php esc_html_e( 'Setup', 'acadium-agent-publisher' ); ?></h2>
-		<table class="widefat striped" style="max-width:60em;">
-			<tbody>
-				<tr>
-					<td><?php esc_html_e( 'Agent users (role "AI Agent")', 'acadium-agent-publisher' ); ?></td>
-					<td>
-						<?php if ( $agents ) : ?>
-							<?php
-							echo esc_html( implode( ', ', array_map( function ( $u ) {
-								return $u->display_name . ' (' . $u->user_login . ')';
-							}, $agents ) ) );
-							?>
-						<?php else : ?>
-							<?php esc_html_e( 'None yet.', 'acadium-agent-publisher' ); ?>
-							<a href="<?php echo esc_url( admin_url( 'user-new.php' ) ); ?>"><?php esc_html_e( 'Add a user with the AI Agent role', 'acadium-agent-publisher' ); ?></a>
-						<?php endif; ?>
-					</td>
-				</tr>
-				<tr>
-					<td><?php esc_html_e( 'Site uses HTTPS', 'acadium-agent-publisher' ); ?></td>
-					<td><?php echo is_ssl() || 'https' === wp_parse_url( home_url(), PHP_URL_SCHEME ) ? $yes : $no; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>
-				</tr>
-				<tr>
-					<td><?php esc_html_e( 'Pretty permalinks', 'acadium-agent-publisher' ); ?></td>
-					<td>
-						<?php echo self::has_pretty_permalinks() ? $yes : $no; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>
-						<?php if ( ! self::has_pretty_permalinks() ) : ?>
-							&mdash; <a href="<?php echo esc_url( admin_url( 'options-permalink.php' ) ); ?>"><?php esc_html_e( 'Settings > Permalinks', 'acadium-agent-publisher' ); ?></a>
-						<?php endif; ?>
-					</td>
-				</tr>
-				<tr>
-					<td><?php esc_html_e( 'Application Passwords available', 'acadium-agent-publisher' ); ?></td>
-					<td><?php echo $app_pw ? $yes : $no; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>
-				</tr>
-				<tr>
-					<td><?php esc_html_e( 'MCP server ready', 'acadium-agent-publisher' ); ?></td>
-					<td>
-						<?php echo $mcp && self::has_pretty_permalinks() ? $yes : $no; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>
-						<?php if ( $mcp && self::has_pretty_permalinks() ) : ?>
-							&mdash; <?php esc_html_e( 'Connection URL:', 'acadium-agent-publisher' ); ?> <code><?php echo esc_html( $endpoint ); ?></code>
-						<?php endif; ?>
-					</td>
-				</tr>
 			</tbody>
 		</table>
 		<?php

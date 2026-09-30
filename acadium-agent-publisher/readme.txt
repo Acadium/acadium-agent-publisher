@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.4.0
+Stable tag: 1.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -30,9 +30,11 @@ Checks before an agent publishes:
 
 Every agent action is listed under Recent agent activity on the settings page.
 
-= Connect from claude.ai and the Claude mobile apps =
+= Connect Claude in a few clicks =
 
-Turn on **Allow OAuth connections** under Settings > Agent Publisher. You can then add your site in claude.ai as a custom connector, with no Application Password and no software on your computer. It works on the web, in the desktop app and in the Claude mobile apps.
+The **Connect Claude** section under Settings > Agent Publisher creates the AI Agent user, turns on connector sign-in (OAuth) and shows the connection URL. In Claude Desktop, claude.ai or the Claude mobile apps, add the site as a custom connector with that URL: no Application Password and no software on your computer.
+
+**Connection checks** on the same page test HTTPS, permalinks, the connection URL, the Authorization header and connector sign-in from the server itself, and explain how to fix what fails (with a one-click .htaccess fix for the Authorization header on Apache). Sites that can't use the connector can create an Application Password there instead.
 
 When you connect, an administrator logs in to WordPress and approves the connection, choosing which AI Agent user it acts as. The connection never gets the administrator's own permissions. Connected apps are listed on the settings page, and you can disconnect any of them.
 
@@ -133,6 +135,16 @@ Your web server may be removing the Authorization header, which is common with A
 
 == Changelog ==
 
+= 1.5.0 =
+* New "Connect Claude" setup on the settings page: create the AI Agent user, turn on connector sign-in and copy the connection URL in a few clicks. An Application Password and a ready-made Claude Desktop configuration are available for sites that can't use the connector.
+* New connection checks: HTTPS, permalinks, whether the connection URL answers, whether the Authorization header reaches WordPress (with a one-click .htaccess fix on Apache) and whether connector sign-in can be discovered.
+* Security: publishing, unpublishing and editing live posts through the abilities is now limited to AI Agent users; other users need their own WordPress capabilities (for example, Contributors can no longer publish through the abilities in Publish mode).
+* Security: OAuth access tokens work only on the MCP and Abilities REST routes, checked on the route actually dispatched; never in wp-admin, admin-ajax, cron or XML-RPC.
+* Security: invalid authorization requests show an error page instead of redirecting; the consent screen shows the app's address and flags apps outside claude.ai as unverified; administrators who also hold the AI Agent role can't be chosen as a connection's user.
+* Security: reusing a rotated refresh token revokes the connection; clients can only revoke their own tokens; token and revocation rate limits are per client (new filter agent_publisher_client_ip for sites behind a proxy).
+* Image downloads stop at the size limit instead of fetching the whole file first.
+* MCP errors are written to the PHP error log only when WP_DEBUG is on.
+
 = 1.4.0 =
 * New `create-post` replaces `create-draft-post`. In one call it creates the post with categories, tags and a featured image (`featured_image` uploads it), and can submit it for review or publish or schedule it when the site mode allows. An agent now needs one approval for a finished post instead of up to three.
 * If a pre-publish check fails, `create-post` creates nothing (including the uploaded image), so the agent can fix its input and try again.
@@ -165,6 +177,9 @@ Your web server may be removing the Authorization header, which is common with A
 * First release: list terms, get post, create draft post, update draft post and upload media abilities, plus the AI Agent (drafts only) role.
 
 == Upgrade Notice ==
+
+= 1.5.0 =
+Security release: recommended for all sites, especially those in a Publish mode. Adds one-click setup and connection checks under Settings > Agent Publisher.
 
 = 1.4.0 =
 create-draft-post is now create-post, which can also publish and set a featured image in one step. Restart Claude Desktop (or reconnect) after updating so it picks up the new tools.

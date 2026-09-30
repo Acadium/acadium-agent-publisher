@@ -3,7 +3,7 @@
  * Plugin Name:       Acadium Agent Publisher
  * Plugin URI:        https://github.com/Acadium/acadium-agent-publisher
  * Description:       Let Claude and other AI agents draft, review and publish posts, upload images and look up categories and tags, within rules you set. Works with the WordPress Abilities API and MCP clients such as Claude.
- * Version:           1.4.0
+ * Version:           1.5.0
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Acadium
@@ -23,7 +23,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'AGENT_PUBLISHER_VERSION', '1.4.0' );
+define( 'AGENT_PUBLISHER_VERSION', '1.5.0' );
 define( 'AGENT_PUBLISHER_FILE', __FILE__ );
 define( 'AGENT_PUBLISHER_DIR', __DIR__ );
 
@@ -37,6 +37,7 @@ if ( is_readable( __DIR__ . '/vendor/autoload_packages.php' ) ) {
 require_once __DIR__ . '/includes/class-policy.php';
 require_once __DIR__ . '/includes/class-abilities.php';
 require_once __DIR__ . '/includes/class-settings-page.php';
+require_once __DIR__ . '/includes/class-setup.php';
 require_once __DIR__ . '/includes/class-mcp-server.php';
 require_once __DIR__ . '/includes/oauth/class-oauth-store.php';
 require_once __DIR__ . '/includes/oauth/class-oauth-server.php';
@@ -44,6 +45,7 @@ require_once __DIR__ . '/includes/oauth/class-oauth-server.php';
 Agent_Publisher_Policy::init();
 Agent_Publisher_Abilities::init();
 Agent_Publisher_Settings_Page::init();
+Agent_Publisher_Setup::init();
 Agent_Publisher_MCP_Server::init();
 Agent_Publisher_OAuth_Server::init();
 

@@ -256,10 +256,20 @@ final class Agent_Publisher_OAuth_Store {
 	}
 
 	/** Look up and delete a refresh token (rotation: each is usable once). */
+	/**
+	 * Rotate a refresh token. The spent token is remembered until it would
+	 * have expired: presenting it again means it leaked, so the whole
+	 * connection is revoked (OAuth 2.1 refresh token reuse detection).
+	 */
 	public static function consume_refresh( $refresh ) {
 		$row = self::find( 'refresh', $refresh );
 		if ( $row && self::delete_hash( $refresh ) ) {
+			self::insert( 'spent_refresh', $refresh, $row, self::REFRESH_TTL );
 			return $row;
+		}
+		$spent = self::find( 'spent_refresh', $refresh );
+		if ( $spent ) {
+			self::revoke_grant( $spent['grant_id'] );
 		}
 		return null;
 	}
@@ -286,10 +296,11 @@ final class Agent_Publisher_OAuth_Store {
 	}
 
 	/** Revoke a single token (RFC 7009). Revoking a refresh token ends its grant. */
-	public static function revoke_token( $token ) {
+	/** RFC 7009: a client may only revoke its own tokens. */
+	public static function revoke_token( $token, $client_id ) {
 		foreach ( array( 'refresh', 'access' ) as $type ) {
 			$row = self::find( $type, $token );
-			if ( $row ) {
+			if ( $row && $row['client_id'] === $client_id ) {
 				if ( 'refresh' === $type ) {
 					self::revoke_grant( $row['grant_id'] );
 				} else {

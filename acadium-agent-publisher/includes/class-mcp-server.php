@@ -56,7 +56,8 @@ final class Agent_Publisher_MCP_Server {
 			'Draft, review, publish and update posts on this WordPress site, upload images and look up categories and tags, within the rules the site owner set. Call get-capabilities first to see what this site allows. Write a post with a single create-post call: include categories, tags and featured_image, and pass status "publish" when the user asked for the post to be published (or "pending" for review). The site\'s publishing mode and pre-publish checks are the safeguards, and the app asks the user to approve each change, so don\'t ask again in chat for what the user already requested.',
 			AGENT_PUBLISHER_VERSION,
 			array( \WP\MCP\Transport\HttpTransport::class ),
-			\WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler::class,
+			// Log MCP errors (with their request context) only when debugging.
+			defined( 'WP_DEBUG' ) && WP_DEBUG ? \WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler::class : \WP\MCP\Infrastructure\ErrorHandling\NullMcpErrorHandler::class,
 			\WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler::class,
 			self::ability_names()
 		);

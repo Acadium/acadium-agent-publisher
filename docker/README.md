@@ -257,7 +257,7 @@ curl -s https://blog.example.com/.well-known/oauth-authorization-server
 
 2. **Install Node.js 18+** on the computer running Claude. The connection uses the small bridge [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote), which `npx` downloads automatically.
 
-3. **Claude Desktop.** Go to Settings → Developer → Edit Config, add the following, and restart Claude Desktop. Claude Desktop doesn't use your shell's `PATH`, so give the full path from `which npx` as `command`, and its folder in `PATH` (see the main README, Option B):
+3. **Claude Desktop.** Go to Settings → Developer → Edit Config, add the following, and restart Claude Desktop. Claude Desktop doesn't use your shell's `PATH`, so give the full path from `which npx` as `command`, and its folder in `PATH` (see the main README, Getting started, Step 3). The plugin's settings page can also create the Application Password and show this configuration ready to paste:
    ```json
    {
      "mcpServers": {

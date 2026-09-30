@@ -1,7 +1,7 @@
 <?php
 /**
  * Acadium Agent Publisher uninstall: remove the plugin's role, settings,
- * activity log and OAuth table (all connections end).
+ * activity log, OAuth table (all connections end) and .htaccess rule.
  *
  * Users that had the role are left in place with no role (WordPress keeps
  * their posts); reassign or delete them under Users. Posts and media the
@@ -11,6 +11,10 @@
  */
 
 defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
+
+// The Authorization header rule, if the setup screen added one.
+require_once __DIR__ . '/includes/class-setup.php';
+Agent_Publisher_Setup::remove_htaccess_block();
 
 remove_role( 'agent_publisher_agent' );
 delete_option( 'agent_publisher_role_version' );

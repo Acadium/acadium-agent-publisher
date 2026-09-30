@@ -245,7 +245,11 @@ final class Agent_Publisher_Abilities {
 					return false;
 				}
 				$type = get_post_type_object( $input['post_type'] ?? self::post_types()[0] );
-				return $type && current_user_can( $type->cap->edit_posts );
+				if ( ! $type || ! current_user_can( $type->cap->edit_posts ) ) {
+					return false;
+				}
+				// Other users publish only if WordPress lets them.
+				return 'publish' !== $status || Agent_Publisher_Policy::is_agent_user() || current_user_can( $type->cap->publish_posts );
 			},
 			'meta'                => self::meta( false, false, false ),
 		) );
@@ -305,7 +309,12 @@ final class Agent_Publisher_Abilities {
 				if ( ! Agent_Publisher_Policy::allows( 'publish' ) ) {
 					return Agent_Publisher_Policy::not_allowed( 'publish posts', 'publish' );
 				}
-				return self::can_manage( $input['id'] ?? 0 );
+				$ok = self::can_manage( $input['id'] ?? 0 );
+				if ( true !== $ok || Agent_Publisher_Policy::is_agent_user() ) {
+					return $ok;
+				}
+				$type = get_post_type_object( get_post_type( (int) $input['id'] ) );
+				return $type && current_user_can( $type->cap->publish_posts );
 			},
 			'meta'                => self::meta( false, true, false ),
 		) );
@@ -419,17 +428,17 @@ final class Agent_Publisher_Abilities {
 	}
 
 	/**
-	 * The post exists, is a supported type, and is the current user's (or the
-	 * user may edit others' posts). Used for status changes: the agent role
-	 * has no capability for published posts, so ownership is checked here and
-	 * the site mode by each ability.
+	 * The post exists, is a supported type, and the current user may change
+	 * its status: an AI Agent user its own posts (the role has no capability
+	 * for published posts, so ownership is checked here and the site mode by
+	 * each ability); anyone else only what WordPress lets them edit.
 	 */
 	private static function can_manage( $id ) {
 		$post = get_post( (int) $id );
 		if ( ! $post || ! in_array( $post->post_type, self::post_types(), true ) ) {
 			return new WP_Error( 'agent_publisher_not_found', 'No such post.', array( 'status' => 404 ) );
 		}
-		if ( (int) $post->post_author === get_current_user_id() || current_user_can( 'edit_others_posts' ) ) {
+		if ( Agent_Publisher_Policy::is_agent_user() ? (int) $post->post_author === get_current_user_id() : current_user_can( 'edit_post', $post->ID ) ) {
 			return true;
 		}
 		return new WP_Error( 'agent_publisher_not_yours', 'You can only change your own posts.', array( 'status' => 403 ) );
@@ -784,17 +793,25 @@ final class Agent_Publisher_Abilities {
 			if ( ! $url ) {
 				return new WP_Error( 'agent_publisher_bad_url', 'url must be a public https URL.', array( 'status' => 400 ) );
 			}
-			// download_url() uses wp_safe_remote_get(), which refuses private/local addresses.
-			$tmp = download_url( $url, 30 );
-			if ( is_wp_error( $tmp ) ) {
-				return $tmp;
+			// wp_safe_remote_get() refuses private/local addresses; the download
+			// stops at the size limit instead of fetching the whole file first.
+			$tmp      = wp_tempnam( $url );
+			$response = wp_safe_remote_get( $url, array(
+				'timeout'             => 30,
+				'stream'              => true,
+				'filename'            => $tmp,
+				'limit_response_size' => $max + 1,
+			) );
+			if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+				wp_delete_file( $tmp );
+				return is_wp_error( $response ) ? $response : new WP_Error( 'agent_publisher_download_failed', sprintf( 'Could not download the image (HTTP %d).', (int) wp_remote_retrieve_response_code( $response ) ), array( 'status' => 400 ) );
 			}
 			$name = ! empty( $input['filename'] ) ? $input['filename'] : wp_basename( wp_parse_url( $url, PHP_URL_PATH ) );
 		} elseif ( ! empty( $input['data_base64'] ) ) {
 			if ( empty( $input['filename'] ) ) {
 				return new WP_Error( 'agent_publisher_missing_filename', 'filename is required with data_base64.', array( 'status' => 400 ) );
 			}
-			$bytes = base64_decode( preg_replace( '/^data:[^,]*,/', '', $input['data_base64'] ), true );
+			$bytes = base64_decode( preg_replace( '/^data:[^,]*,/', '', $input['data_base64'] ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- image bytes sent by the agent.
 			if ( false === $bytes ) {
 				return new WP_Error( 'agent_publisher_bad_base64', 'data_base64 is not valid base64.', array( 'status' => 400 ) );
 			}
@@ -802,7 +819,7 @@ final class Agent_Publisher_Abilities {
 				return new WP_Error( 'agent_publisher_too_large', sprintf( 'Image is larger than %s.', size_format( $max ) ), array( 'status' => 413 ) );
 			}
 			$tmp = wp_tempnam( $input['filename'] );
-			file_put_contents( $tmp, $bytes );
+			file_put_contents( $tmp, $bytes ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- temp file from wp_tempnam(), handed to media_handle_sideload().
 			$name = $input['filename'];
 		} else {
 			return new WP_Error( 'agent_publisher_no_source', 'Provide url or data_base64.', array( 'status' => 400 ) );

@@ -90,6 +90,20 @@ final class Agent_Publisher_Policy {
 		return self::settings()['mode'];
 	}
 
+	/**
+	 * A user whose only role is AI Agent (and who can't manage the site).
+	 * Only these users get the plugin's elevated publishing path and OAuth
+	 * tokens; everyone else goes through their own WordPress capabilities.
+	 *
+	 * @param WP_User|int|null $user Defaults to the current user.
+	 */
+	public static function is_agent_user( $user = null ) {
+		$user = null === $user ? wp_get_current_user() : ( $user instanceof WP_User ? $user : get_userdata( (int) $user ) );
+		return $user && $user->exists()
+			&& array( self::ROLE ) === array_values( (array) $user->roles )
+			&& ! user_can( $user, 'manage_options' );
+	}
+
 	/** True if the site's mode is at least $mode. */
 	public static function allows( $mode ) {
 		return array_search( self::mode(), self::MODES, true ) >= array_search( $mode, self::MODES, true );
