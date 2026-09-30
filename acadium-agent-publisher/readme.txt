@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -34,7 +34,7 @@ Every agent action is listed under Recent agent activity on the settings page.
 
 The **Connect Claude** section under Settings > Agent Publisher creates the AI Agent user, turns on connector sign-in (OAuth) and shows the connection URL. In Claude Desktop, claude.ai or the Claude mobile apps, add the site as a custom connector with that URL: no Application Password and no software on your computer.
 
-**Connection checks** on the same page test HTTPS, permalinks, the connection URL, the Authorization header and connector sign-in from the server itself, and explain how to fix what fails (with a one-click .htaccess fix for the Authorization header on Apache). Sites that can't use the connector can create an Application Password there instead.
+**Connection checks** on the same page test HTTPS, permalinks, the connection URL, the Authorization header and connector sign-in from the server itself, and explain how to fix what fails (with a one-click .htaccess fix for the Authorization header on Apache). Sites that can't use the connector (for example, WordPress in a subfolder) can use the Claude Desktop extension instead: download it from the same page, create an Application Password there, and open the file. Claude Desktop installs it and runs it with its own Node.js, so there's nothing else to install and no configuration file to edit.
 
 When you connect, an administrator logs in to WordPress and approves the connection, choosing which AI Agent user it acts as. The connection never gets the administrator's own permissions. Connected apps are listed on the settings page, and you can disconnect any of them.
 
@@ -135,6 +135,11 @@ Your web server may be removing the Authorization header, which is common with A
 
 == Changelog ==
 
+= 1.6.0 =
+* Claude Desktop extension (MCP Bundle) for sites that can't use the connector: download it from Settings > Agent Publisher, create an Application Password there, and open the file. Claude Desktop installs it with its own Node.js; no Node.js install, npx path or JSON editing. The password is stored securely by Claude Desktop.
+* The Application Password panel now shows the connection URL, username and password with Copy buttons, for the extension's install dialog. The claude_desktop_config.json block is still available for manual setups.
+* The extension pins the WordPress MCP bridge to a tested version instead of fetching the latest from npm at every start.
+
 = 1.5.0 =
 * New "Connect Claude" setup on the settings page: create the AI Agent user, turn on connector sign-in and copy the connection URL in a few clicks. An Application Password and a ready-made Claude Desktop configuration are available for sites that can't use the connector.
 * New connection checks: HTTPS, permalinks, whether the connection URL answers, whether the Authorization header reaches WordPress (with a one-click .htaccess fix on Apache) and whether connector sign-in can be discovered.
@@ -177,6 +182,9 @@ Your web server may be removing the Authorization header, which is common with A
 * First release: list terms, get post, create draft post, update draft post and upload media abilities, plus the AI Agent (drafts only) role.
 
 == Upgrade Notice ==
+
+= 1.6.0 =
+Adds a one-click Claude Desktop extension for sites that can't use the connector. Includes the 1.5.0 security fixes.
 
 = 1.5.0 =
 Security release: recommended for all sites, especially those in a Publish mode. Adds one-click setup and connection checks under Settings > Agent Publisher.

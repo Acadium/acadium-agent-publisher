@@ -1,0 +1,72 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/mcpb/main/schemas/mcpb-manifest-latest.schema.json",
+  "manifest_version": "0.3",
+  "name": "acadium-agent-publisher",
+  "display_name": "Acadium Agent Publisher (WordPress)",
+  "version": "0.0.0",
+  "description": "Let Claude write, schedule and publish posts on your WordPress site, within the rules you set in WordPress.",
+  "long_description": "Connects Claude Desktop to a WordPress site running the Acadium Agent Publisher plugin. Claude signs in as the site's AI Agent user with an Application Password, and the plugin enforces the site's publishing mode (drafts only, submit for review, publish, or publish and edit live posts) and pre-publish checks.\n\nIn WordPress, go to Settings > Agent Publisher > Connect Claude, open \"Can't use the connector?\", and create an Application Password. Paste the connection URL, the username and the password into this extension's settings.\n\nMost sites can instead add the connection URL as a custom connector (Settings > Connectors), which needs no extension or password.",
+  "author": {
+    "name": "Acadium",
+    "url": "https://acadium.com"
+  },
+  "homepage": "https://wordpress.org/plugins/acadium-agent-publisher/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Acadium/acadium-agent-publisher"
+  },
+  "support": "https://github.com/Acadium/acadium-agent-publisher/issues",
+  "license": "GPL-2.0-or-later",
+  "keywords": ["wordpress", "blog", "publishing", "mcp"],
+  "server": {
+    "type": "node",
+    "entry_point": "node_modules/@automattic/mcp-wordpress-remote/dist/proxy.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/node_modules/@automattic/mcp-wordpress-remote/dist/proxy.js"],
+      "env": {
+        "WP_API_URL": "${user_config.connection_url}",
+        "WP_API_USERNAME": "${user_config.username}",
+        "WP_API_PASSWORD": "${user_config.app_password}"
+      }
+    }
+  },
+  "tools": [
+    { "name": "agent-publisher-get-capabilities", "description": "What the site lets Claude do (publishing mode and checks)" },
+    { "name": "agent-publisher-list-terms", "description": "List categories or tags" },
+    { "name": "agent-publisher-get-post", "description": "Read one of Claude's posts" },
+    { "name": "agent-publisher-create-post", "description": "Create a post as a draft, for review, or published or scheduled, with its featured image" },
+    { "name": "agent-publisher-update-draft-post", "description": "Change a draft" },
+    { "name": "agent-publisher-submit-for-review", "description": "Send a draft to Pending review" },
+    { "name": "agent-publisher-publish-post", "description": "Publish or schedule an existing draft" },
+    { "name": "agent-publisher-unpublish-post", "description": "Take a post offline (back to draft)" },
+    { "name": "agent-publisher-update-published-post", "description": "Change a live post" },
+    { "name": "agent-publisher-upload-media", "description": "Add an image to the Media Library" }
+  ],
+  "user_config": {
+    "connection_url": {
+      "type": "string",
+      "title": "Connection URL",
+      "description": "From WordPress: Settings > Agent Publisher > Connect Claude. Looks like https://your-site.com/wp-json/acadium-agent-publisher/mcp",
+      "required": true
+    },
+    "username": {
+      "type": "string",
+      "title": "Username",
+      "description": "The AI Agent user Claude signs in as.",
+      "default": "claude",
+      "required": true
+    },
+    "app_password": {
+      "type": "string",
+      "title": "Application Password",
+      "description": "Created under Settings > Agent Publisher > Connect Claude > \"Can't use the connector?\". Stored securely by Claude Desktop.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": { "node": ">=18.0.0" }
+  }
+}

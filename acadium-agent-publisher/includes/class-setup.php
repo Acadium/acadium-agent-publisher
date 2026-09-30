@@ -22,6 +22,9 @@ final class Agent_Publisher_Setup {
 	const SELFTEST_TOKEN   = 'agent_publisher_selftest';
 	const SELFTEST_SEEN    = 'agent_publisher_selftest_seen';
 
+	/** The Claude Desktop extension (MCP Bundle) attached to each GitHub release. */
+	const EXTENSION_URL = 'https://github.com/Acadium/acadium-agent-publisher/releases/latest/download/acadium-agent-publisher.mcpb';
+
 	/** Set when an Application Password was just created: array( 'user' => login, 'password' => string ). */
 	private static $new_password = null;
 
@@ -110,7 +113,7 @@ final class Agent_Publisher_Setup {
 
 	private static function create_app_password( $user_id ) {
 		$user = get_userdata( $user_id );
-		if ( ! $user || ! in_array( Agent_Publisher_Policy::ROLE, (array) $user->roles, true ) ) {
+		if ( ! $user || ! Agent_Publisher_Policy::is_agent_user( $user ) ) {
 			return new WP_Error( 'agent_publisher_not_agent', __( 'Choose a user with the AI Agent role.', 'acadium-agent-publisher' ) );
 		}
 		if ( ! wp_is_application_passwords_available_for_user( $user ) ) {
@@ -282,7 +285,7 @@ final class Agent_Publisher_Setup {
 			$meta = $root ? self::loopback( Agent_Publisher_OAuth_Server::resource_metadata_url(), array(), 'GET' ) : null;
 			$ok   = $root && ! is_wp_error( $meta ) && 200 === $meta['status'] && isset( $meta['body']['resource'] );
 			if ( ! $root ) {
-				$detail = __( 'WordPress is installed in a subfolder. The connector needs it at the root of the domain (example.com, not example.com/blog), because Claude looks for /.well-known/ there. Use the Claude Desktop extension instead.', 'acadium-agent-publisher' );
+				$detail = __( 'WordPress is installed in a subfolder. The connector needs it at the root of the domain (example.com, not example.com/blog), because Claude looks for /.well-known/ there. Use the Claude Desktop extension instead (under "Can\'t use the connector?" above).', 'acadium-agent-publisher' );
 			} elseif ( ! $ok ) {
 				$detail = __( 'Requests to /.well-known/oauth-protected-resource do not reach WordPress. Allow /.well-known/ and /agent-publisher-oauth/ through your web server, CDN and firewall.', 'acadium-agent-publisher' );
 			} else {
@@ -425,7 +428,8 @@ final class Agent_Publisher_Setup {
 
 	/** The "Connect Claude" section at the top of the settings page. */
 	public static function render() {
-		$agents = get_users( array( 'role' => Agent_Publisher_Policy::ROLE, 'fields' => array( 'ID', 'user_login', 'display_name' ) ) );
+		// Users whose only role is AI Agent (an administrator who also has the role doesn't count).
+		$agents = array_values( array_filter( get_users( array( 'role' => Agent_Publisher_Policy::ROLE ) ), array( 'Agent_Publisher_Policy', 'is_agent_user' ) ) );
 		$s      = Agent_Publisher_Policy::settings();
 		$url    = Agent_Publisher_MCP_Server::url();
 		$labels = Agent_Publisher_Policy::mode_labels();
@@ -483,34 +487,43 @@ final class Agent_Publisher_Setup {
 		self::render_checks();
 	}
 
-	/** Alternative for sites the connector can't reach: Application Password + Claude Desktop config. */
+	/** Alternative for sites the connector can't reach: the Claude Desktop extension + an Application Password. */
 	private static function render_extension( array $agents ) {
 		$open = null !== self::$new_password;
 		?>
 		<details <?php echo $open ? 'open' : ''; ?> style="margin-top:1em;">
-			<summary style="cursor:pointer;"><?php esc_html_e( 'Can\'t use the connector? Connect with an Application Password instead', 'acadium-agent-publisher' ); ?></summary>
+			<summary style="cursor:pointer;"><?php esc_html_e( 'Can\'t use the connector? Use the Claude Desktop extension instead', 'acadium-agent-publisher' ); ?></summary>
 			<div style="padding:.5em 0 0 1.2em;">
-				<p class="description"><?php esc_html_e( 'For sites the connector cannot reach, e.g. WordPress in a subfolder or a CDN that blocks /.well-known/. Claude Desktop only.', 'acadium-agent-publisher' ); ?></p>
-				<?php if ( self::$new_password ) : ?>
-					<?php self::render_desktop_config( self::$new_password ); ?>
-				<?php elseif ( ! $agents ) : ?>
-					<p><?php esc_html_e( 'Create the AI Agent user first (step 1).', 'acadium-agent-publisher' ); ?></p>
-				<?php else : ?>
-					<p><?php esc_html_e( 'Create an Application Password for the AI Agent user. It is shown once.', 'acadium-agent-publisher' ); ?></p>
-					<?php foreach ( $agents as $agent ) : ?>
-						<?php
-						/* translators: %s: user login. */
-						self::action_button( 'app_password', sprintf( __( 'Create Application Password for %s', 'acadium-agent-publisher' ), $agent->user_login ), false, array( 'user' => $agent->ID ) );
-						?>
-					<?php endforeach; ?>
-				<?php endif; ?>
+				<p class="description"><?php esc_html_e( 'For sites the connector cannot reach, e.g. WordPress in a subfolder or a CDN that blocks /.well-known/. Claude Desktop only; nothing else to install.', 'acadium-agent-publisher' ); ?></p>
+				<ol>
+					<li>
+						<a class="button" href="<?php echo esc_url( self::EXTENSION_URL ); ?>"><?php esc_html_e( 'Download the Claude Desktop extension', 'acadium-agent-publisher' ); ?></a>
+						<span class="description">acadium-agent-publisher.mcpb</span>
+					</li>
+					<li>
+						<?php if ( self::$new_password ) : ?>
+							<?php self::render_credentials( self::$new_password ); ?>
+						<?php elseif ( ! $agents ) : ?>
+							<?php esc_html_e( 'Create the AI Agent user first (step 1), then create an Application Password here.', 'acadium-agent-publisher' ); ?>
+						<?php else : ?>
+							<?php esc_html_e( 'Create an Application Password for the AI Agent user. It is shown once.', 'acadium-agent-publisher' ); ?><br />
+							<?php foreach ( $agents as $agent ) : ?>
+								<?php
+								/* translators: %s: user login. */
+								self::action_button( 'app_password', sprintf( __( 'Create Application Password for %s', 'acadium-agent-publisher' ), $agent->user_login ), false, array( 'user' => $agent->ID ) );
+								?>
+							<?php endforeach; ?>
+						<?php endif; ?>
+					</li>
+					<li><?php esc_html_e( 'Open the downloaded file. Claude Desktop shows an install dialog: click Install, paste the connection URL, username and Application Password into its settings, and turn the extension on.', 'acadium-agent-publisher' ); ?></li>
+				</ol>
 			</div>
 		</details>
 		<?php
 	}
 
 	/** Shown once, right after the password is created. */
-	private static function render_desktop_config( array $creds ) {
+	private static function render_credentials( array $creds ) {
 		$config = array(
 			'mcpServers' => array(
 				sanitize_key( wp_parse_url( home_url(), PHP_URL_HOST ) ) => array(
@@ -525,11 +538,18 @@ final class Agent_Publisher_Setup {
 			),
 		);
 		?>
-		<div class="notice notice-warning inline"><p><strong><?php esc_html_e( 'Copy this now: the password is not shown again.', 'acadium-agent-publisher' ); ?></strong> <?php esc_html_e( 'You can revoke it any time under Users > Profile > Application Passwords.', 'acadium-agent-publisher' ); ?></p></div>
-		<p><?php esc_html_e( 'Application Password:', 'acadium-agent-publisher' ); ?> <?php self::copy_field( 'agent-publisher-password', $creds['password'] ); ?></p>
-		<p><?php esc_html_e( 'In Claude Desktop, open Settings > Developer > Edit Config, add this to claude_desktop_config.json, save, and restart Claude Desktop. Needs Node.js; if Claude cannot find npx, replace "npx" with its full path (run "which npx" in Terminal).', 'acadium-agent-publisher' ); ?></p>
-		<pre id="agent-publisher-config" style="background:#f6f7f7;padding:1em;overflow:auto;max-width:60em;"><?php echo esc_html( wp_json_encode( $config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></pre>
-		<button type="button" class="button" data-agent-publisher-copy="agent-publisher-config" data-copied="<?php esc_attr_e( 'Copied', 'acadium-agent-publisher' ); ?>"><?php esc_html_e( 'Copy', 'acadium-agent-publisher' ); ?></button>
+		<div class="notice notice-warning inline"><p><strong><?php esc_html_e( 'Copy the password now: it is not shown again.', 'acadium-agent-publisher' ); ?></strong> <?php esc_html_e( 'You can revoke it any time under Users > Profile > Application Passwords.', 'acadium-agent-publisher' ); ?></p></div>
+		<table class="form-table" role="presentation" style="margin-top:0;">
+			<tr><th scope="row"><?php esc_html_e( 'Connection URL', 'acadium-agent-publisher' ); ?></th><td><?php self::copy_field( 'agent-publisher-ext-url', Agent_Publisher_MCP_Server::url() ); ?></td></tr>
+			<tr><th scope="row"><?php esc_html_e( 'Username', 'acadium-agent-publisher' ); ?></th><td><?php self::copy_field( 'agent-publisher-username', $creds['user'] ); ?></td></tr>
+			<tr><th scope="row"><?php esc_html_e( 'Application Password', 'acadium-agent-publisher' ); ?></th><td><?php self::copy_field( 'agent-publisher-password', $creds['password'] ); ?></td></tr>
+		</table>
+		<details>
+			<summary style="cursor:pointer;"><?php esc_html_e( 'Prefer editing claude_desktop_config.json yourself?', 'acadium-agent-publisher' ); ?></summary>
+			<p class="description"><?php esc_html_e( 'Instead of the extension: in Claude Desktop, open Settings > Developer > Edit Config, add this, save, and restart. Needs Node.js; if Claude cannot find npx, replace "npx" with its full path (run "which npx" in Terminal) and add its folder to PATH in env.', 'acadium-agent-publisher' ); ?></p>
+			<pre id="agent-publisher-config" style="background:#f6f7f7;padding:1em;overflow:auto;max-width:60em;"><?php echo esc_html( wp_json_encode( $config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></pre>
+			<button type="button" class="button" data-agent-publisher-copy="agent-publisher-config" data-copied="<?php esc_attr_e( 'Copied', 'acadium-agent-publisher' ); ?>"><?php esc_html_e( 'Copy', 'acadium-agent-publisher' ); ?></button>
+		</details>
 		<?php
 	}
 

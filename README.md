@@ -46,7 +46,16 @@ To use it, turn the connector on for a chat from the chat's tools menu.
 
 > On Claude Team or Enterprise plans, an organization owner may need to allow custom connectors first.
 
-**Can't use the connector?** It needs WordPress at the root of its domain (`example.com`, not `example.com/blog`), and any CDN or firewall must let `/.well-known/` and `/agent-publisher-oauth/` through. If that isn't possible, open **Can't use the connector?** under Step 3 on the settings page: it creates an Application Password for the `claude` user and shows the ready-made Claude Desktop configuration to paste into **Settings → Developer → Edit Config**. That route needs [Node.js](https://nodejs.org); if Claude Desktop can't find `npx` (common with nvm), use its full path (`which npx`) as `command` and add its folder to `PATH` in `env`.
+**Can't use the connector?** It needs WordPress at the root of its domain (`example.com`, not `example.com/blog`), and any CDN or firewall must let `/.well-known/` and `/agent-publisher-oauth/` through. If that isn't possible, use the **Claude Desktop extension** instead. It needs no Node.js and no JSON editing, because Claude Desktop runs it with its own built-in Node.js:
+
+1. On the settings page, open **Can't use the connector? Use the Claude Desktop extension instead**.
+2. Click **Download the Claude Desktop extension** ([`acadium-agent-publisher.mcpb`](https://github.com/Acadium/acadium-agent-publisher/releases/latest/download/acadium-agent-publisher.mcpb)).
+3. Click **Create Application Password for claude**. The page shows the connection URL, username and password, each with a **Copy** button. The password is shown only once.
+4. Open the downloaded file. Claude Desktop shows an install dialog: click **Install**, paste the three values into the extension's settings, and turn it on. Claude Desktop stores the password securely.
+
+The same panel also shows a `claude_desktop_config.json` block for anyone who prefers editing the config file (that route needs [Node.js](https://nodejs.org)).
+
+**Claude Code:** create an Application Password as above, then run `claude mcp add my-wordpress -e WP_API_URL=<connection URL> -e WP_API_USERNAME=claude -e 'WP_API_PASSWORD=<password>' -- npx -y @automattic/mcp-wordpress-remote@0.4.0`.
 
 ### Step 4: Try it
 
@@ -216,6 +225,7 @@ Revoke the Application Password (Users > agent > Application Passwords), disconn
 - For a development checkout, run `composer install` in `acadium-agent-publisher/` (or `docker run --rm -v "$PWD/acadium-agent-publisher":/app -w /app composer:2 install`).
 - Package for WordPress.org or manual install: `bin/build-zip.sh` installs the Composer dependencies (with Docker) and writes `dist/acadium-agent-publisher.zip`. It checks that the plugin header version matches the readme's `Stable tag`.
 - Before a release, run the official [Plugin Check](https://wordpress.org/plugins/plugin-check/) plugin (`wp plugin check acadium-agent-publisher`).
+- The Claude Desktop extension lives in [`desktop-extension/`](desktop-extension/): a [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) manifest and the pinned bridge (`@automattic/mcp-wordpress-remote`, see `package.json` / `package-lock.json`). `bin/build-mcpb.sh` validates the manifest, installs the bridge, sets the bundle version from the plugin header and writes `dist/acadium-agent-publisher.mcpb`. It isn't committed; it's attached to each GitHub release, which is where the settings page's download link points (`releases/latest/download/acadium-agent-publisher.mcpb`).
 
 ## Releasing to WordPress.org
 
@@ -233,7 +243,11 @@ GitHub is where development happens. SVN is a release channel: commit **only fin
 **Before each release**
 1. Bump `Version:` and `AGENT_PUBLISHER_VERSION` in `acadium-agent-publisher.php`, and `Stable tag:` in `readme.txt`. Add a Changelog entry and an Upgrade Notice.
 2. Run Plugin Check. Make sure admin screens and form handlers use nonces, sanitize input and escape output: that's what reviewers and security scanners look for.
-3. Run `bin/build-zip.sh`, test the zip on a real site, then commit, tag `vX.Y.Z` and push to GitHub.
+3. Run `bin/build-zip.sh` and `bin/build-mcpb.sh`, test both, then commit, tag `vX.Y.Z` and push to GitHub.
+4. Create the GitHub release with the extension attached (the settings page links to the latest release's `.mcpb`):
+   ```bash
+   gh release create vX.Y.Z dist/acadium-agent-publisher.mcpb dist/acadium-agent-publisher.zip --title "X.Y.Z" --notes "…"
+   ```
 
 **Commit to SVN** (install the client with `brew install subversion`):
 

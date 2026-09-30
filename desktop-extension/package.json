@@ -1,0 +1,10 @@
+{
+  "name": "acadium-agent-publisher-desktop-extension",
+  "private": true,
+  "description": "Claude Desktop extension (MCP Bundle) for Acadium Agent Publisher: bundles the WordPress MCP bridge so users don't install Node.js or edit JSON.",
+  "license": "GPL-2.0-or-later",
+  "type": "module",
+  "dependencies": {
+    "@automattic/mcp-wordpress-remote": "0.4.0"
+  }
+}
