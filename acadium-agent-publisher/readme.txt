@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.6.1
+Stable tag: 1.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -56,14 +56,15 @@ Publishing can trigger things that unpublishing cannot undo, such as subscriber 
 
 * `agent-publisher/get-capabilities` (read-only): what the site allows
 * `agent-publisher/list-terms` (read-only)
-* `agent-publisher/get-post` (read-only)
+* `agent-publisher/get-post` (read-only; any status, including published)
 * `agent-publisher/create-post` (as a draft, for review, or published in one step with its featured image)
 * `agent-publisher/update-draft-post`
 * `agent-publisher/upload-media`
+* `agent-publisher/find-media` (read-only: find images in the Media Library)
 * `agent-publisher/submit-for-review`
 * `agent-publisher/publish-post` (publish now or schedule)
 * `agent-publisher/unpublish-post`
-* `agent-publisher/update-published-post`
+* `agent-publisher/update-published-post` (including replacing the featured image)
 
 They are available through the core Abilities REST API (`/wp-json/wp-abilities/v1/`; read-only abilities use GET, the others POST) and, as one MCP tool each, at the plugin's MCP endpoint `/wp-json/acadium-agent-publisher/mcp` for clients such as claude.ai, Claude Desktop and Claude Code.
 
@@ -135,6 +136,13 @@ Your web server may be removing the Authorization header, which is common with A
 
 == Changelog ==
 
+= 1.7.0 =
+* New find-media tool: Claude finds images in the Media Library by title or file name. For large images, upload them in WordPress and ask Claude to use them.
+* Image guidance under Settings > Agent Publisher > Images: minimum width, the aspect ratios your theme crops featured images to, and guidance for agents. get-capabilities reports it along with accepted types, the size limit and the sizes WordPress generates. Images that don't fit get warnings in the result; "Strict" refuses to publish with them.
+* update-draft-post and update-published-post accept featured_image, so a live post's featured image can be replaced in one step. Post results include the featured image and the sizes WordPress generated from it.
+* get-post reads the agent's own published and scheduled posts.
+* Base64 uploads accept line breaks, data: prefixes, URL-safe characters and missing padding; errors show what's wrong and where. An optional sha256 refuses corrupted uploads. upload-media returns the file's size and sha256.
+
 = 1.6.1 =
 * Fix: connector requests failed with a server error (HTTP 500, "Couldn't connect to the server" in Claude) on sites where another plugin checks the logged-in user early, such as Limit Login Attempts Reloaded. Introduced in 1.5.0.
 
@@ -185,6 +193,9 @@ Your web server may be removing the Authorization header, which is common with A
 * First release: list terms, get post, create draft post, update draft post and upload media abilities, plus the AI Agent (drafts only) role.
 
 == Upgrade Notice ==
+
+= 1.7.0 =
+Adds image guidance and checks, a find-media tool for images you upload yourself, and one-step featured image replacement on live posts.
 
 = 1.6.1 =
 Fixes Claude connectors failing with a server error on sites that run Limit Login Attempts Reloaded or similar plugins.

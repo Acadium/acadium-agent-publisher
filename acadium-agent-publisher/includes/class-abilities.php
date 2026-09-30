@@ -95,8 +95,10 @@ final class Agent_Publisher_Abilities {
 				'id'          => array( 'type' => 'integer' ),
 				'status'      => array( 'type' => 'string' ),
 				'title'       => array( 'type' => 'string' ),
-				'edit_url'    => array( 'type' => 'string', 'description' => 'wp-admin editor URL for a human reviewer.' ),
-				'preview_url' => array( 'type' => 'string', 'description' => 'Preview URL (requires being logged in).' ),
+				'edit_url'       => array( 'type' => 'string', 'description' => 'wp-admin editor URL for a human reviewer.' ),
+				'preview_url'    => array( 'type' => 'string', 'description' => 'Preview URL (requires being logged in).' ),
+				'featured_image' => array( 'type' => 'object', 'description' => 'The featured image: id, url, width, height, alt, and the sizes WordPress generated from it (name => url, width, height), to check how it is cropped.' ),
+				'image_warnings' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'description' => 'Problems with the featured image for this site (too small, or a shape the theme crops); see get-capabilities > images.' ),
 			),
 		);
 
@@ -131,6 +133,7 @@ final class Agent_Publisher_Abilities {
 					'mode_label' => array( 'type' => 'string' ),
 					'allowed'    => array( 'type' => 'object' ),
 					'checks'     => array( 'type' => 'object' ),
+					'images'     => array( 'type' => 'object', 'description' => 'How to add images and what this site needs: accepted types, size limits, generated sizes, minimum width, aspect ratios the theme crops to, and guidance from the site owner.' ),
 					'user'       => array( 'type' => 'object' ),
 				),
 			),
@@ -177,7 +180,7 @@ final class Agent_Publisher_Abilities {
 
 		wp_register_ability( 'agent-publisher/get-post', array(
 			'label'               => __( 'Get a post', 'acadium-agent-publisher' ),
-			'description'         => 'Returns a post the current user can edit, including its raw HTML content, categories, tags, featured image and allowed custom fields. Use it before update-draft-post to see the current text.',
+			'description'         => 'Returns one of your posts in any status (draft, pending, scheduled or published), including its raw HTML content, categories, tags, featured image with its generated sizes, and allowed custom fields. Use it before update-draft-post or update-published-post to see the current version.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -195,18 +198,27 @@ final class Agent_Publisher_Abilities {
 			),
 			'execute_callback'    => array( __CLASS__, 'get_post' ),
 			'permission_callback' => function ( $input ) {
-				return self::can_edit( $input['id'] ?? 0 );
+				return self::can_read( $input['id'] ?? 0 );
 			},
 			'meta'                => self::meta( true, false, true ),
 		) );
 
 		$image_source = array(
 			'url'         => array( 'type' => 'string', 'description' => 'Public https URL of the image. Provide url OR data_base64.' ),
-			'data_base64' => array( 'type' => 'string', 'description' => 'Base64-encoded image bytes. Requires filename.' ),
+			'data_base64' => array( 'type' => 'string', 'description' => 'Base64-encoded image bytes. Requires filename. Only practical for small images (under about 100 KB); for larger ones use url, or find-media for images the user uploaded. Whitespace and line breaks are ignored.' ),
+			'sha256'      => array( 'type' => 'string', 'description' => 'Optional SHA-256 (hex) of the image file. If given, the upload is refused unless the received bytes match, so a copying mistake can\'t save a corrupted image.' ),
 			'filename'    => array( 'type' => 'string', 'description' => 'File name with extension, e.g. hero.jpg.' ),
 			'alt_text'    => array( 'type' => 'string', 'description' => 'Describe the image for screen readers. Required.' ),
 			'title'       => array( 'type' => 'string' ),
 			'caption'     => array( 'type' => 'string' ),
+		);
+
+		$featured_image = array(
+			'type'                 => 'object',
+			'description'          => 'Uploads an image and makes it the featured image. Use this or featured_media, not both. For an image already in the Media Library (e.g. one the user uploaded), pass its id as featured_media instead (see find-media).',
+			'properties'           => $image_source,
+			'required'             => array( 'alt_text' ),
+			'additionalProperties' => false,
 		);
 
 		wp_register_ability( 'agent-publisher/create-post', array(
@@ -220,13 +232,7 @@ final class Agent_Publisher_Abilities {
 				), $post_fields, array(
 					'status'         => array( 'type' => 'string', 'enum' => array( 'draft', 'pending', 'publish' ), 'default' => 'draft', 'description' => 'draft (default), pending (submit for review) or publish (publish now, or schedule with date).' ),
 					'date'           => array( 'type' => 'string', 'description' => 'Only with status "publish": future publication time, ISO 8601 (e.g. 2026-10-01T09:00:00-04:00; without an offset the site\'s timezone is used). Omit to publish now.' ),
-					'featured_image' => array(
-						'type'                 => 'object',
-						'description'          => 'Uploads an image and makes it the featured image. Use this or featured_media, not both.',
-						'properties'           => $image_source,
-						'required'             => array( 'alt_text' ),
-						'additionalProperties' => false,
-					),
+					'featured_image' => $featured_image,
 				) ),
 				'required'             => array( 'title', 'content' ),
 				'additionalProperties' => false,
@@ -262,13 +268,16 @@ final class Agent_Publisher_Abilities {
 				'type'                 => 'object',
 				'properties'           => array_merge( array(
 					'id' => array( 'type' => 'integer', 'description' => 'ID of the draft to change.' ),
-				), $post_fields ),
+				), $post_fields, array( 'featured_image' => $featured_image ) ),
 				'required'             => array( 'id' ),
 				'additionalProperties' => false,
 			),
 			'output_schema'       => $post_output,
 			'execute_callback'    => array( __CLASS__, 'update_draft' ),
 			'permission_callback' => function ( $input ) {
+				if ( ! empty( $input['featured_image'] ) && ! current_user_can( 'upload_files' ) ) {
+					return false;
+				}
 				return self::can_edit( $input['id'] ?? 0 );
 			},
 			'meta'                => self::meta( false, true, false ),
@@ -337,13 +346,13 @@ final class Agent_Publisher_Abilities {
 
 		wp_register_ability( 'agent-publisher/update-published-post', array(
 			'label'               => __( 'Update a published post', 'acadium-agent-publisher' ),
-			'description'         => 'Changes fields of one of your posts that is already live. Only the fields you pass are changed, and visitors see the change immediately: go ahead when the user asked for the change; otherwise ask them first. Only when the site mode is "Publish and edit live posts".',
+			'description'         => 'Changes fields of one of your posts that is already live, including replacing its featured image in one step (featured_image uploads a new one; featured_media uses one from the Media Library). Only the fields you pass are changed, and visitors see the change immediately: go ahead when the user asked for the change; otherwise ask them first. Only when the site mode is "Publish and edit live posts". Use get-post first to see the current version.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array_merge( array(
 					'id' => array( 'type' => 'integer', 'description' => 'ID of the published post to change.' ),
-				), $post_fields ),
+				), $post_fields, array( 'featured_image' => $featured_image ) ),
 				'required'             => array( 'id' ),
 				'additionalProperties' => false,
 			),
@@ -353,6 +362,9 @@ final class Agent_Publisher_Abilities {
 				if ( ! Agent_Publisher_Policy::allows( 'publish_edit' ) ) {
 					return Agent_Publisher_Policy::not_allowed( 'edit published posts', 'publish_edit' );
 				}
+				if ( ! empty( $input['featured_image'] ) && ! current_user_can( 'upload_files' ) ) {
+					return false;
+				}
 				return self::can_manage( $input['id'] ?? 0 );
 			},
 			'meta'                => self::meta( false, true, false ),
@@ -360,7 +372,7 @@ final class Agent_Publisher_Abilities {
 
 		wp_register_ability( 'agent-publisher/upload-media', array(
 			'label'               => __( 'Upload an image', 'acadium-agent-publisher' ),
-			'description'         => 'Adds an image to the Media Library from a public https URL or from base64 data, with alt text, and returns its ID and URL to use in post content (<img src>). For a new post\'s featured image, use featured_image on create-post instead. Optionally attaches the image to an existing draft and makes it that draft\'s featured image.',
+			'description'         => 'Adds an image to the Media Library from a public https URL or from base64 data, with alt text, and returns its ID, URL and generated sizes to use in post content (<img src>). For a featured image, use featured_image on create-post / update-draft-post / update-published-post instead. base64 is only practical for small images: for large ones use a public url, or ask the user to upload the image in WordPress (Media > Add New) and find it with find-media. Optionally attaches the image to an existing draft and makes it that draft\'s featured image.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -374,11 +386,16 @@ final class Agent_Publisher_Abilities {
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
-					'id'     => array( 'type' => 'integer' ),
-					'url'    => array( 'type' => 'string' ),
-					'width'  => array( 'type' => 'integer' ),
-					'height' => array( 'type' => 'integer' ),
-					'mime'   => array( 'type' => 'string' ),
+					'id'       => array( 'type' => 'integer' ),
+					'url'      => array( 'type' => 'string' ),
+					'width'    => array( 'type' => 'integer' ),
+					'height'   => array( 'type' => 'integer' ),
+					'alt'      => array( 'type' => 'string' ),
+					'sizes'    => array( 'type' => 'object' ),
+					'mime'     => array( 'type' => 'string' ),
+					'bytes'    => array( 'type' => 'integer', 'description' => 'Size of the uploaded file.' ),
+					'sha256'   => array( 'type' => 'string', 'description' => 'SHA-256 of the uploaded file, to compare with the original.' ),
+					'warnings' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'description' => 'Problems if this image is used as a featured image on this site.' ),
 				),
 			),
 			'execute_callback'    => array( __CLASS__, 'upload_media' ),
@@ -393,6 +410,47 @@ final class Agent_Publisher_Abilities {
 			},
 			'meta'                => self::meta( false, false, false ),
 		) );
+
+		wp_register_ability( 'agent-publisher/find-media', array(
+			'label'               => __( 'Find images in the Media Library', 'acadium-agent-publisher' ),
+			'description'         => 'Searches the Media Library for images by title or file name, newest first, e.g. images the user uploaded in WordPress. Use a result\'s id as featured_media, or its url in post content. This is the best way to use large or high-resolution images: ask the user to upload them under Media > Add New, then find them here.',
+			'category'            => self::CATEGORY,
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'search' => array( 'type' => 'string', 'description' => 'Words from the image title or file name. Omit to list the newest images.' ),
+					'mine'   => array( 'type' => 'boolean', 'default' => false, 'description' => 'Only images you uploaded.' ),
+					'limit'  => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 50, 'default' => 20 ),
+				),
+				'additionalProperties' => false,
+				'default'              => array(),
+			),
+			'output_schema'       => array(
+				'type'  => 'array',
+				'items' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'id'          => array( 'type' => 'integer' ),
+						'title'       => array( 'type' => 'string' ),
+						'filename'    => array( 'type' => 'string' ),
+						'url'         => array( 'type' => 'string' ),
+						'width'       => array( 'type' => 'integer' ),
+						'height'      => array( 'type' => 'integer' ),
+						'alt'         => array( 'type' => 'string' ),
+						'mime'        => array( 'type' => 'string' ),
+						'date'        => array( 'type' => 'string' ),
+						'uploaded_by' => array( 'type' => 'string' ),
+						'attached_to' => array( 'type' => 'integer', 'description' => 'Post the image was uploaded to (0 if none).' ),
+						'warnings'    => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'description' => 'Problems if used as a featured image on this site.' ),
+					),
+				),
+			),
+			'execute_callback'    => array( __CLASS__, 'find_media' ),
+			'permission_callback' => function () {
+				return current_user_can( 'upload_files' );
+			},
+			'meta'                => self::meta( true, false, true ),
+		) );
 	}
 
 	/* ------------------------------------------------------------------ */
@@ -402,6 +460,19 @@ final class Agent_Publisher_Abilities {
 	private static function post_types() {
 		$types = array_values( array_filter( (array) apply_filters( 'agent_publisher_post_types', array( 'post' ) ), 'post_type_exists' ) );
 		return $types ? $types : array( 'post' );
+	}
+
+	private static function max_upload() {
+		return (int) apply_filters( 'agent_publisher_max_upload', 10 * MB_IN_BYTES );
+	}
+
+	private static function upload_mimes() {
+		return (array) apply_filters( 'agent_publisher_upload_mimes', array(
+			'jpg|jpeg|jpe' => 'image/jpeg',
+			'png'          => 'image/png',
+			'gif'          => 'image/gif',
+			'webp'         => 'image/webp',
+		) );
 	}
 
 	private static function meta_keys() {
@@ -425,6 +496,22 @@ final class Agent_Publisher_Abilities {
 			);
 		}
 		return false;
+	}
+
+	/**
+	 * The user may read this post in any status: an AI Agent user its own
+	 * posts (the role can't edit published posts, but may read them);
+	 * anyone else what WordPress lets them edit.
+	 */
+	private static function can_read( $id ) {
+		$post = get_post( (int) $id );
+		if ( ! $post || ! in_array( $post->post_type, self::post_types(), true ) ) {
+			return new WP_Error( 'agent_publisher_not_found', 'No such post.', array( 'status' => 404 ) );
+		}
+		if ( current_user_can( 'edit_post', $post->ID ) || ( Agent_Publisher_Policy::is_agent_user() && (int) $post->post_author === get_current_user_id() ) ) {
+			return true;
+		}
+		return new WP_Error( 'agent_publisher_not_yours', 'You can only read your own posts.', array( 'status' => 403 ) );
 	}
 
 	/**
@@ -476,6 +563,19 @@ final class Agent_Publisher_Abilities {
 				'allowed_categories'     => $names,
 				'daily_limit'            => (int) $s['daily_limit'],
 				'published_last_24h'     => Agent_Publisher_Policy::published_last_24h(),
+				'strict_image_checks'    => (bool) $s['image_checks_strict'],
+			),
+			'images'     => array(
+				'how_to_add'           => 'Prefer a public https url, or find-media for images the user uploaded to the Media Library (the way to use large images). data_base64 is only practical for small images (under about 100 KB); pass sha256 of the file to verify it arrived intact.',
+				'accepted_types'       => array_values( self::upload_mimes() ),
+				'max_upload_bytes'     => self::max_upload(),
+				'scaled_down_above_px' => (int) apply_filters( 'big_image_size_threshold', 2560, array( 0, 0 ), '', 0 ), // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core filter.
+				'generated_sizes'      => wp_get_registered_image_subsizes(),
+				'featured_image'       => array(
+					'min_width'     => (int) $s['image_min_width'],
+					'aspect_ratios' => array_keys( Agent_Publisher_Policy::aspect_ratios() ),
+					'guidance'      => $s['image_guidance'],
+				),
 			),
 			'user'       => array(
 				'id'    => (int) $user->ID,
@@ -626,15 +726,27 @@ final class Agent_Publisher_Abilities {
 		if ( is_wp_error( $valid ) ) {
 			return $valid;
 		}
+		// Upload first: if it fails, nothing is changed.
+		$uploaded = self::upload_featured( $input, $post->ID );
+		if ( is_wp_error( $uploaded ) ) {
+			return $uploaded;
+		}
 		$postarr       = self::postarr( $input );
 		$postarr['ID'] = $post->ID;
 		if ( count( $postarr ) > 1 ) {
 			$id = wp_update_post( wp_slash( $postarr ), true );
 			if ( is_wp_error( $id ) ) {
+				if ( $uploaded ) {
+					wp_delete_attachment( $uploaded, true );
+				}
 				return $id;
 			}
 		}
 		self::save_extras( $post->ID, $input );
+		if ( $uploaded ) {
+			set_post_thumbnail( $post->ID, $uploaded );
+			Agent_Publisher_Policy::log( 'upload', $post->ID, wp_get_attachment_url( $uploaded ) );
+		}
 		Agent_Publisher_Policy::log( 'update', $post->ID );
 		return self::summary( get_post( $post->ID ) );
 	}
@@ -739,16 +851,39 @@ final class Agent_Publisher_Abilities {
 			return new WP_Error( 'agent_publisher_checks_failed', 'Agents may only use these category IDs on published posts: ' . implode( ', ', $allowed ) . '.', array( 'status' => 422 ) );
 		}
 
+		$uploaded = self::upload_featured( $input, $post->ID );
+		if ( is_wp_error( $uploaded ) ) {
+			return $uploaded;
+		}
+		// A live post's new featured image must pass strict image checks, like a newly published one.
+		$new_image = $uploaded ? $uploaded : (int) ( $input['featured_media'] ?? 0 );
+		if ( $new_image && Agent_Publisher_Policy::settings()['image_checks_strict'] ) {
+			$problems = Agent_Publisher_Policy::image_warnings( $new_image );
+			if ( $problems ) {
+				if ( $uploaded ) {
+					wp_delete_attachment( $uploaded, true );
+				}
+				return new WP_Error( 'agent_publisher_checks_failed', 'Cannot use this featured image: ' . implode( '; ', $problems ) . '. The post was left unchanged.', array( 'status' => 422 ) );
+			}
+		}
+
 		$postarr       = self::postarr( $input );
 		$postarr['ID'] = $post->ID;
 		if ( count( $postarr ) > 1 ) {
 			$id = wp_update_post( wp_slash( $postarr ), true );
 			if ( is_wp_error( $id ) ) {
+				if ( $uploaded ) {
+					wp_delete_attachment( $uploaded, true );
+				}
 				return $id;
 			}
 		}
 		self::save_extras( $post->ID, $input );
-		if ( count( $postarr ) > 1 || array_intersect_key( $input, array_flip( array( 'categories', 'tags', 'featured_media', 'meta' ) ) ) ) {
+		if ( $uploaded ) {
+			set_post_thumbnail( $post->ID, $uploaded );
+			Agent_Publisher_Policy::log( 'upload', $post->ID, wp_get_attachment_url( $uploaded ) );
+		}
+		if ( $uploaded || count( $postarr ) > 1 || array_intersect_key( $input, array_flip( array( 'categories', 'tags', 'featured_media', 'meta' ) ) ) ) {
 			Agent_Publisher_Policy::log( 'update_published', $post->ID );
 		}
 		return self::published_summary( get_post( $post->ID ) );
@@ -765,13 +900,112 @@ final class Agent_Publisher_Abilities {
 		}
 		Agent_Publisher_Policy::log( 'upload', $post_id, wp_get_attachment_url( $id ) );
 
-		$src = wp_get_attachment_image_src( $id, 'full' );
+		$file = wp_get_original_image_path( $id );
+		return self::image_info( $id ) + array(
+			'mime'     => get_post_mime_type( $id ),
+			'bytes'    => $file ? (int) filesize( $file ) : 0,
+			'sha256'   => $file ? hash_file( 'sha256', $file ) : '',
+			'warnings' => Agent_Publisher_Policy::image_warnings( $id ),
+		);
+	}
+
+	public static function find_media( $input = array() ) {
+		$limit  = max( 1, min( 50, (int) ( $input['limit'] ?? 20 ) ) );
+		$search = trim( (string) ( $input['search'] ?? '' ) );
+		$query  = array(
+			'post_type'      => 'attachment',
+			'post_status'    => 'inherit',
+			'post_mime_type' => 'image',
+			'posts_per_page' => $limit,
+			'orderby'        => 'date',
+			'order'          => 'DESC',
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+		);
+		if ( ! empty( $input['mine'] ) ) {
+			$query['author'] = get_current_user_id();
+		}
+		if ( '' === $search ) {
+			$ids = get_posts( $query );
+		} else {
+			// Title/caption matches, plus file name matches (not covered by WordPress search).
+			$ids = array_unique( array_merge(
+				get_posts( $query + array( 's' => $search ) ),
+				get_posts( $query + array( 'meta_query' => array( array( 'key' => '_wp_attached_file', 'value' => $search, 'compare' => 'LIKE' ) ) ) ) // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded by posts_per_page.
+			) );
+			rsort( $ids );
+			$ids = array_slice( $ids, 0, $limit );
+		}
+		return array_map( function ( $id ) {
+			$att    = get_post( $id );
+			$author = get_userdata( (int) $att->post_author );
+			$info   = self::image_info( $id );
+			unset( $info['sizes'] );
+			return $info + array(
+				'title'       => html_entity_decode( get_the_title( $id ) ),
+				'filename'    => wp_basename( (string) get_attached_file( $id ) ),
+				'mime'        => get_post_mime_type( $id ),
+				'date'        => mysql2date( 'c', $att->post_date, false ),
+				'uploaded_by' => $author ? $author->display_name : '',
+				'attached_to' => (int) $att->post_parent,
+				'warnings'    => Agent_Publisher_Policy::image_warnings( $id ),
+			);
+		}, array_map( 'intval', $ids ) );
+	}
+
+	/**
+	 * featured_image on the update abilities: upload it (attached to the post)
+	 * before anything else changes. Returns the attachment ID, 0 if none, or an error.
+	 */
+	private static function upload_featured( $input, $post_id ) {
+		if ( empty( $input['featured_image'] ) ) {
+			return 0;
+		}
+		if ( isset( $input['featured_media'] ) ) {
+			return new WP_Error( 'agent_publisher_two_images', 'Pass featured_image or featured_media, not both.', array( 'status' => 400 ) );
+		}
+		return self::sideload_image( $input['featured_image'], $post_id );
+	}
+
+	/** Base64 to bytes, tolerating whitespace, data: prefixes, URL-safe characters and missing padding; precise errors otherwise. */
+	private static function decode_base64( $data ) {
+		$data = preg_replace( '/^data:[^,]*,/', '', (string) $data );
+		$data = strtr( preg_replace( '/\s+/', '', $data ), '-_', '+/' );
+		if ( preg_match( '/[^A-Za-z0-9+\/=]/', $data, $m, PREG_OFFSET_CAPTURE ) ) {
+			return new WP_Error( 'agent_publisher_bad_base64', sprintf( 'data_base64 has an invalid character %1$s at position %2$d of %3$d (whitespace ignored). Only A-Z, a-z, 0-9, + and / are allowed, with = padding at the end. Nothing was saved.', wp_json_encode( $m[0][0] ), $m[0][1], strlen( $data ) ), array( 'status' => 400 ) );
+		}
+		$body = rtrim( $data, '=' );
+		$pad  = strpos( $body, '=' );
+		if ( false !== $pad ) {
+			return new WP_Error( 'agent_publisher_bad_base64', sprintf( 'data_base64 has "=" at position %1$d of %2$d; "=" may only appear at the end. Nothing was saved.', $pad, strlen( $data ) ), array( 'status' => 400 ) );
+		}
+		if ( 1 === strlen( $body ) % 4 ) {
+			return new WP_Error( 'agent_publisher_bad_base64', sprintf( 'data_base64 has %d characters (without padding), which is not a valid base64 length: a character is missing or extra somewhere. Nothing was saved.', strlen( $body ) ), array( 'status' => 400 ) );
+		}
+		$bytes = base64_decode( $body . str_repeat( '=', ( 4 - strlen( $body ) % 4 ) % 4 ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- image bytes sent by the agent.
+		if ( false === $bytes ) {
+			return new WP_Error( 'agent_publisher_bad_base64', 'data_base64 is not valid base64. Nothing was saved.', array( 'status' => 400 ) );
+		}
+		return $bytes;
+	}
+
+	/** An image attachment: id, url, dimensions, alt text and the sizes WordPress generated. */
+	private static function image_info( $id ) {
+		$meta  = wp_get_attachment_metadata( $id );
+		$sizes = array();
+		foreach ( array_keys( (array) ( $meta['sizes'] ?? array() ) ) as $name ) {
+			$src = wp_get_attachment_image_src( $id, $name );
+			if ( $src ) {
+				$sizes[ $name ] = array( 'url' => $src[0], 'width' => (int) $src[1], 'height' => (int) $src[2] );
+			}
+		}
 		return array(
 			'id'     => (int) $id,
-			'url'    => wp_get_attachment_url( $id ),
-			'width'  => (int) ( $src[1] ?? 0 ),
-			'height' => (int) ( $src[2] ?? 0 ),
-			'mime'   => get_post_mime_type( $id ),
+			'url'    => (string) wp_get_attachment_url( $id ),
+			'width'  => (int) ( $meta['width'] ?? 0 ),
+			'height' => (int) ( $meta['height'] ?? 0 ),
+			'alt'    => (string) get_post_meta( $id, '_wp_attachment_image_alt', true ),
+			'sizes'  => (object) $sizes,
 		);
 	}
 
@@ -786,7 +1020,7 @@ final class Agent_Publisher_Abilities {
 		require_once ABSPATH . 'wp-admin/includes/media.php';
 		require_once ABSPATH . 'wp-admin/includes/image.php';
 
-		$max = (int) apply_filters( 'agent_publisher_max_upload', 10 * MB_IN_BYTES );
+		$max = self::max_upload();
 
 		if ( ! empty( $input['url'] ) ) {
 			$url = esc_url_raw( $input['url'], array( 'https' ) );
@@ -811,9 +1045,9 @@ final class Agent_Publisher_Abilities {
 			if ( empty( $input['filename'] ) ) {
 				return new WP_Error( 'agent_publisher_missing_filename', 'filename is required with data_base64.', array( 'status' => 400 ) );
 			}
-			$bytes = base64_decode( preg_replace( '/^data:[^,]*,/', '', $input['data_base64'] ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- image bytes sent by the agent.
-			if ( false === $bytes ) {
-				return new WP_Error( 'agent_publisher_bad_base64', 'data_base64 is not valid base64.', array( 'status' => 400 ) );
+			$bytes = self::decode_base64( $input['data_base64'] );
+			if ( is_wp_error( $bytes ) ) {
+				return $bytes;
 			}
 			if ( strlen( $bytes ) > $max ) {
 				return new WP_Error( 'agent_publisher_too_large', sprintf( 'Image is larger than %s.', size_format( $max ) ), array( 'status' => 413 ) );
@@ -830,13 +1064,18 @@ final class Agent_Publisher_Abilities {
 			return new WP_Error( 'agent_publisher_too_large', sprintf( 'Image is larger than %s.', size_format( $max ) ), array( 'status' => 413 ) );
 		}
 
+		if ( ! empty( $input['sha256'] ) ) {
+			$expected = strtolower( trim( (string) $input['sha256'] ) );
+			$actual   = hash_file( 'sha256', $tmp );
+			if ( ! hash_equals( $expected, $actual ) ) {
+				$size = (int) filesize( $tmp );
+				wp_delete_file( $tmp );
+				return new WP_Error( 'agent_publisher_checksum', sprintf( 'Checksum mismatch: received %1$d bytes with sha256 %2$s, but sha256 %3$s was expected. The image data was changed or cut off on the way; send it again. Nothing was saved.', $size, $actual, $expected ), array( 'status' => 400 ) );
+			}
+		}
+
 		// Check the real content type, not just the extension.
-		$mimes = (array) apply_filters( 'agent_publisher_upload_mimes', array(
-			'jpg|jpeg|jpe' => 'image/jpeg',
-			'png'          => 'image/png',
-			'gif'          => 'image/gif',
-			'webp'         => 'image/webp',
-		) );
+		$mimes = self::upload_mimes();
 		$check = wp_check_filetype_and_ext( $tmp, $name, $mimes );
 		if ( empty( $check['type'] ) ) {
 			wp_delete_file( $tmp );
@@ -933,12 +1172,21 @@ final class Agent_Publisher_Abilities {
 	}
 
 	private static function summary( $post ) {
-		return array(
+		$out   = array(
 			'id'          => (int) $post->ID,
 			'status'      => $post->post_status,
 			'title'       => html_entity_decode( get_the_title( $post ) ),
 			'edit_url'    => admin_url( 'post.php?post=' . $post->ID . '&action=edit' ),
 			'preview_url' => get_preview_post_link( $post ),
 		);
+		$thumb = (int) get_post_thumbnail_id( $post );
+		if ( $thumb ) {
+			$out['featured_image'] = self::image_info( $thumb );
+			$warnings              = Agent_Publisher_Policy::image_warnings( $thumb );
+			if ( $warnings ) {
+				$out['image_warnings'] = $warnings;
+			}
+		}
+		return $out;
 	}
 }

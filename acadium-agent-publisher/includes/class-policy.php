@@ -64,6 +64,10 @@ final class Agent_Publisher_Policy {
 			'allowed_categories'     => array(),
 			'daily_limit'            => 0,
 			'oauth_enabled'          => false,
+			'image_min_width'        => 0,
+			'image_aspect_ratios'    => '',
+			'image_guidance'         => '',
+			'image_checks_strict'    => false,
 		);
 	}
 
@@ -83,7 +87,69 @@ final class Agent_Publisher_Policy {
 			'allowed_categories'     => $cats,
 			'daily_limit'            => min( 1000, absint( $input['daily_limit'] ?? 0 ) ),
 			'oauth_enabled'          => ! empty( $input['oauth_enabled'] ),
+			'image_min_width'        => min( 10000, absint( $input['image_min_width'] ?? 0 ) ),
+			'image_aspect_ratios'    => self::sanitize_ratios( $input['image_aspect_ratios'] ?? '' ),
+			'image_guidance'         => mb_substr( sanitize_textarea_field( (string) ( $input['image_guidance'] ?? '' ) ), 0, 2000 ),
+			'image_checks_strict'    => ! empty( $input['image_checks_strict'] ),
 		);
+	}
+
+	/** "2:1, 3/2, 16x9" -> "2:1, 3:2, 16:9" (at most 6). */
+	private static function sanitize_ratios( $value ) {
+		preg_match_all( '/(\d+(?:\.\d+)?)\s*[:x\/]\s*(\d+(?:\.\d+)?)/i', is_string( $value ) ? $value : '', $m, PREG_SET_ORDER );
+		$out = array();
+		foreach ( $m as $r ) {
+			if ( (float) $r[1] > 0 && (float) $r[2] > 0 ) {
+				$out[] = ( (float) $r[1] + 0 ) . ':' . ( (float) $r[2] + 0 );
+			}
+		}
+		return implode( ', ', array_slice( array_unique( $out ), 0, 6 ) );
+	}
+
+	/** @return float[] Label ("2:1") => width / height. */
+	public static function aspect_ratios() {
+		$out = array();
+		foreach ( array_filter( array_map( 'trim', explode( ',', self::settings()['image_aspect_ratios'] ) ) ) as $label ) {
+			list( $w, $h ) = array_map( 'floatval', explode( ':', $label ) );
+			if ( $w > 0 && $h > 0 ) {
+				$out[ $label ] = $w / $h;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Advice about an image used as a featured image, from the site's image
+	 * settings: too narrow, or a shape the theme's crops will cut into.
+	 *
+	 * @return string[]
+	 */
+	public static function image_warnings( $attachment_id ) {
+		$s    = self::settings();
+		$meta = wp_get_attachment_metadata( (int) $attachment_id );
+		$w    = (int) ( $meta['width'] ?? 0 );
+		$h    = (int) ( $meta['height'] ?? 0 );
+		if ( ! $w || ! $h ) {
+			return array();
+		}
+		$out = array();
+		if ( $s['image_min_width'] && $w < $s['image_min_width'] ) {
+			$out[] = sprintf( 'the featured image is %1$dx%2$d px; this site asks for at least %3$d px wide', $w, $h, $s['image_min_width'] );
+		}
+		$ratios = self::aspect_ratios();
+		if ( $ratios ) {
+			$best = null;
+			foreach ( $ratios as $label => $ratio ) {
+				$off = abs( $w / $h - $ratio ) / $ratio;
+				if ( null === $best || $off < $best[1] ) {
+					$best = array( $label, $off );
+				}
+			}
+			if ( $best[1] > 0.1 ) {
+				$out[] = sprintf( 'the featured image is %1$dx%2$d px (%3$s:1), but this site\'s theme crops featured images to %4$s, so part of it will be cut off; use an image close to %5$s', $w, $h, round( $w / $h, 2 ), implode( ', ', array_keys( $ratios ) ), $best[0] );
+			}
+		}
+		return $out;
 	}
 
 	public static function mode() {
@@ -160,6 +226,13 @@ final class Agent_Publisher_Policy {
 				$problems[] = 'this site requires a featured image (pass featured_image to create-post, or use agent-publisher/upload-media with set_featured: true)';
 			} elseif ( '' === trim( (string) get_post_meta( $thumb, '_wp_attachment_image_alt', true ) ) ) {
 				$problems[] = 'the featured image needs alt text';
+			}
+		}
+
+		// Strict image checks: the image warnings (size, shape) block publishing.
+		if ( $s['image_checks_strict'] && get_post_thumbnail_id( $post ) ) {
+			foreach ( self::image_warnings( get_post_thumbnail_id( $post ) ) as $warning ) {
+				$problems[] = $warning;
 			}
 		}
 

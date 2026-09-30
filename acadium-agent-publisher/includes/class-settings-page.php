@@ -182,6 +182,40 @@ final class Agent_Publisher_Settings_Page {
 					</tr>
 				</table>
 
+				<h2><?php esc_html_e( 'Images', 'acadium-agent-publisher' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Tells agents what images suit your theme. Agents see this before they add a featured image, and get a warning when an image doesn\'t fit.', 'acadium-agent-publisher' ); ?></p>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><label for="agent-publisher-image-min-width"><?php esc_html_e( 'Minimum width', 'acadium-agent-publisher' ); ?></label></th>
+						<td>
+							<input type="number" min="0" max="10000" step="1" class="small-text" id="agent-publisher-image-min-width" name="<?php echo esc_attr( $name ); ?>[image_min_width]" value="<?php echo esc_attr( $s['image_min_width'] ); ?>" /> px
+							<p class="description"><?php esc_html_e( 'Featured images narrower than this get a warning (0 = no minimum). For sharp images on high-resolution screens, about twice the widest size your theme shows them at, e.g. 2400.', 'acadium-agent-publisher' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="agent-publisher-image-ratios"><?php esc_html_e( 'Aspect ratios', 'acadium-agent-publisher' ); ?></label></th>
+						<td>
+							<input type="text" class="regular-text" id="agent-publisher-image-ratios" name="<?php echo esc_attr( $name ); ?>[image_aspect_ratios]" value="<?php echo esc_attr( $s['image_aspect_ratios'] ); ?>" placeholder="2:1, 3:2" />
+							<p class="description"><?php esc_html_e( 'Shapes your theme crops featured images to, e.g. "2:1" for a wide header and "3:2" for post cards. Images far from all of them get a warning.', 'acadium-agent-publisher' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Strict', 'acadium-agent-publisher' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox" name="<?php echo esc_attr( $name ); ?>[image_checks_strict]" value="1" <?php checked( $s['image_checks_strict'] ); ?> />
+								<?php esc_html_e( 'Don\'t let agents publish with a featured image that gets a warning', 'acadium-agent-publisher' ); ?>
+							</label>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="agent-publisher-image-guidance"><?php esc_html_e( 'Guidance for agents', 'acadium-agent-publisher' ); ?></label></th>
+						<td>
+							<textarea class="large-text" rows="3" id="agent-publisher-image-guidance" name="<?php echo esc_attr( $name ); ?>[image_guidance]" placeholder="<?php esc_attr_e( 'e.g. Keep text and faces in the middle 70% of the image: the header crop cuts the edges.', 'acadium-agent-publisher' ); ?>"><?php echo esc_textarea( $s['image_guidance'] ); ?></textarea>
+						</td>
+					</tr>
+				</table>
+
 				<h2><?php esc_html_e( 'Connector sign-in (OAuth)', 'acadium-agent-publisher' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>

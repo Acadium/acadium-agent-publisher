@@ -107,16 +107,29 @@ Over MCP, each ability is its own tool, named with `-` instead of `/` (e.g. `age
 
 | Ability | Kind | What it does | Mode needed |
 |---|---|---|---|
-| `agent-publisher/get-capabilities` | read | The site's mode, allowed actions and checks. Agents call this first | any |
+| `agent-publisher/get-capabilities` | read | The site's mode, allowed actions, checks, and image needs (accepted types, size limit, generated sizes, minimum width, aspect ratios, owner's guidance). Agents call this first | any |
 | `agent-publisher/list-terms` | read | List categories or tags (id, name, slug, parent, count) | any |
-| `agent-publisher/get-post` | read | Read one of the agent's posts: raw HTML, excerpt, terms, featured image, allowed custom fields | any |
+| `agent-publisher/get-post` | read | Read one of the agent's posts in any status, including published: raw HTML, excerpt, terms, featured image with its generated sizes, allowed custom fields | any |
 | `agent-publisher/create-post` | write | Create a post in one call: content, categories, tags and an optional featured image (`featured_image` uploads it). `status`: `draft` (default), `pending` or `publish` (with an optional future `date` to schedule). If a pre-publish check fails, nothing is created | any; `pending` needs Submit for review, `publish` needs Publish |
-| `agent-publisher/update-draft-post` | write | Change a draft or pending post | any |
-| `agent-publisher/upload-media` | write | Add an image from a public https URL or base64, with alt text, for use inside post content; optionally a draft's featured image | any |
+| `agent-publisher/update-draft-post` | write | Change a draft or pending post; `featured_image` uploads and sets a new featured image | any |
+| `agent-publisher/upload-media` | write | Add an image from a public https URL or base64 (optional `sha256` to verify), with alt text, for use inside post content; returns its generated sizes and any warnings | any |
+| `agent-publisher/find-media` | read | Search the Media Library for images by title or file name (e.g. ones you uploaded), with size, alt text and warnings | any |
 | `agent-publisher/submit-for-review` | write | Draft → *Pending review* | Submit for review |
 | `agent-publisher/publish-post` | write | Publish an existing draft now, or schedule it with a future `date` (ISO 8601) | Publish |
 | `agent-publisher/unpublish-post` | write | Published or scheduled → draft (undo) | Publish |
-| `agent-publisher/update-published-post` | write | Change a live post | Publish and edit live posts |
+| `agent-publisher/update-published-post` | write | Change a live post, including replacing its featured image in one step (`featured_image` or `featured_media`) | Publish and edit live posts |
+
+Every post result includes the featured image (`featured_image`: id, url, size, alt, generated sizes) and any `image_warnings`.
+
+## Images
+
+Getting images from Claude into WordPress:
+
+- **Large or high-resolution images: upload them yourself** in WordPress (**Media → Add New**) and ask Claude to use them. It finds them with `find-media` and sets them by ID. Nothing large passes through the chat.
+- **Images on the web:** Claude can pass a public `https` URL; the site downloads it.
+- **Small images Claude has as a file:** `data_base64`. A tool call can only carry text Claude writes out, so this is only practical up to roughly 100 KB. Whitespace, `data:` prefixes, URL-safe characters and missing padding are accepted; errors say exactly what's wrong (e.g. the position of an invalid character), and an optional `sha256` makes the upload fail instead of saving a corrupted image.
+
+**Image guidance** (Settings → Agent Publisher → Images): set the minimum width, the aspect ratios your theme crops featured images to, and free-text guidance. `get-capabilities` passes this to Claude before it picks an image; images that don't fit get `image_warnings` in the result. Turn on **Strict** to refuse publishing (and replacing a live post's image) with an image that gets a warning. Guidance about crops done in your theme's CSS has to come from these settings: the plugin can report the sizes WordPress generates, but not how the theme crops them on the page.
 
 ## Safety model
 
