@@ -100,8 +100,10 @@ final class Agent_Publisher_OAuth_Server {
 		$route = isset( $_GET['rest_route'] ) ? sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ) : '';
 		if ( '' === $route && isset( $_SERVER['REQUEST_URI'] ) ) {
 			// The path must start with the REST base (e.g. /wp-json/), not merely contain it.
+			// Built without rest_url(): this can run before $wp_rewrite exists, when
+			// another plugin checks the current user early (e.g. on plugins_loaded).
 			$path  = (string) wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH );
-			$base  = untrailingslashit( (string) wp_parse_url( rest_url(), PHP_URL_PATH ) );
+			$base  = untrailingslashit( (string) wp_parse_url( home_url(), PHP_URL_PATH ) ) . '/' . trim( rest_get_url_prefix(), '/' );
 			$route = 0 === strpos( $path, $base . '/' ) ? substr( $path, strlen( $base ) ) : '';
 		}
 		// restrict_token_routes() re-checks the route that is actually dispatched.

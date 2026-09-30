@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.6.0
+Stable tag: 1.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -135,6 +135,9 @@ Your web server may be removing the Authorization header, which is common with A
 
 == Changelog ==
 
+= 1.6.1 =
+* Fix: connector requests failed with a server error (HTTP 500, "Couldn't connect to the server" in Claude) on sites where another plugin checks the logged-in user early, such as Limit Login Attempts Reloaded. Introduced in 1.5.0.
+
 = 1.6.0 =
 * Claude Desktop extension (MCP Bundle) for sites that can't use the connector: download it from Settings > Agent Publisher, create an Application Password there, and open the file. Claude Desktop installs it with its own Node.js; no Node.js install, npx path or JSON editing. The password is stored securely by Claude Desktop.
 * The Application Password panel now shows the connection URL, username and password with Copy buttons, for the extension's install dialog. The claude_desktop_config.json block is still available for manual setups.
@@ -182,6 +185,9 @@ Your web server may be removing the Authorization header, which is common with A
 * First release: list terms, get post, create draft post, update draft post and upload media abilities, plus the AI Agent (drafts only) role.
 
 == Upgrade Notice ==
+
+= 1.6.1 =
+Fixes Claude connectors failing with a server error on sites that run Limit Login Attempts Reloaded or similar plugins.
 
 = 1.6.0 =
 Adds a one-click Claude Desktop extension for sites that can't use the connector. Includes the 1.5.0 security fixes.
