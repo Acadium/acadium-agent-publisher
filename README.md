@@ -125,7 +125,9 @@ Every post result includes the featured image (`featured_image`: id, url, size, 
 
 Getting images from Claude into WordPress:
 
-- **Large or high-resolution images: upload them yourself** in WordPress (**Media → Add New**) and ask Claude to use them. It finds them with `find-media` and sets them by ID. Nothing large passes through the chat.
+- **Generic images** ("add a photo of a city at night"): Claude is told to use a **free stock photo URL** (Unsplash, Pexels, Wikimedia Commons, respecting the license) instead of generating one. The site downloads it in seconds, at full size.
+- **Your own image: the upload link.** Ask Claude to use your photo; it calls `request-upload` and gives you a one-time link (valid 30 minutes). Open it, drop the image in, and it goes straight into the Media Library under your name, up to the server's upload limit. Claude then picks it up with `get-upload`. No settings needed; it works for roles that can upload files (Author and up).
+- **Images already in WordPress:** Claude finds them with `find-media` and sets them by ID.
 - **Images on the web:** Claude can pass a public `https` URL; the site downloads it.
 - **Small images Claude has as a file:** `data_base64`. A tool call can only carry text Claude writes out, so this is only practical up to roughly 100 KB. Whitespace, `data:` prefixes, URL-safe characters and missing padding are accepted; errors say exactly what's wrong (e.g. the position of an invalid character), and an optional `sha256` makes the upload fail instead of saving a corrupted image.
 

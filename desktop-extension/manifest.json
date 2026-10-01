@@ -82,6 +82,14 @@
     {
       "name": "agent-publisher-find-media",
       "description": "Find images in the Media Library, e.g. ones you uploaded"
+    },
+    {
+      "name": "agent-publisher-request-upload",
+      "description": "Give the user a one-time link to upload their own image"
+    },
+    {
+      "name": "agent-publisher-get-upload",
+      "description": "Get the image from an upload link"
     }
   ],
   "user_config": {

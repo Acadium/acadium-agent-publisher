@@ -215,7 +215,7 @@ final class Agent_Publisher_Abilities {
 
 		$featured_image = array(
 			'type'                 => 'object',
-			'description'          => 'Uploads an image and makes it the featured image. Use this or featured_media, not both. It must be at least the width in get-capabilities > images (recommended_width to look sharp); smaller images are refused when publishing unless the site allows them. Never shrink an image to fit through data_base64: ask the user to upload the full-size image (Media > Add New) and pass its id as featured_media (see find-media).',
+			'description'          => 'Uploads an image and makes it the featured image (url is best: for a generic image use a stock photo URL; for the user\'s own image use request-upload, then featured_media). Use this or featured_media, not both. It must be at least the width in get-capabilities > images (recommended_width to look sharp); smaller images are refused when publishing unless the site allows them. Never shrink an image to fit through data_base64: ask the user to upload the full-size image (Media > Add New) and pass its id as featured_media (see find-media).',
 			'properties'           => $image_source,
 			'required'             => array( 'alt_text' ),
 			'additionalProperties' => false,
@@ -388,7 +388,7 @@ final class Agent_Publisher_Abilities {
 
 		wp_register_ability( 'agent-publisher/upload-media', array(
 			'label'               => __( 'Upload an image', 'acadium-agent-publisher' ),
-			'description'         => 'Adds an image to the Media Library from a public https URL or from base64 data, with alt text, and returns its ID, URL and generated sizes to use in post content (<img src>). For a featured image, use featured_image on create-post / update-draft-post / update-published-post instead. base64 is only practical for small images: for large ones use a public url, or ask the user to upload the image in WordPress (Media > Add New) and find it with find-media. Optionally attaches the image to an existing draft and makes it that draft\'s featured image.',
+			'description'         => 'For a generic or illustrative image (the user did not supply or describe a specific picture), use a free stock photo: pass its direct https image URL (e.g. from Unsplash, Pexels or Wikimedia Commons; respect the license and credit the photographer in the post if it asks for that). Don\'t generate an image and send it as data_base64 unless the user asks for a custom graphic: it is slow and limited to small files. For the user\'s own image, call request-upload and give them the link. Adds an image to the Media Library from a public https URL or from base64 data, with alt text, and returns its ID, URL and generated sizes to use in post content (<img src>). For a featured image, use featured_image on create-post / update-draft-post / update-published-post instead. base64 is only practical for small images: for large ones use a public url, or ask the user to upload the image in WordPress (Media > Add New) and find it with find-media. Optionally attaches the image to an existing draft and makes it that draft\'s featured image.',
 			'category'            => self::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -425,6 +425,64 @@ final class Agent_Publisher_Abilities {
 				return true;
 			},
 			'meta'                => self::meta( false, false, false ),
+		) );
+
+		wp_register_ability( 'agent-publisher/request-upload', array(
+			'label'               => __( 'Ask the user to upload an image', 'acadium-agent-publisher' ),
+			'description'         => 'Creates a one-time upload link (valid 30 minutes) for the user\'s own image: a photo they have, or any image too large to send as data_base64. Give the user the upload_url and ask them to open it and drop the image in; it goes into the Media Library under their name, at full size. Then call get-upload with the upload_id to get the image and use its id as featured_media (or its url in content). Use a stock photo URL instead when any generic image will do.',
+			'category'            => self::CATEGORY,
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'alt_text' => array( 'type' => 'string', 'description' => 'Suggested description of the image (the user can change it on the upload page).' ),
+				),
+				'additionalProperties' => false,
+				'default'              => array(),
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'upload_id'  => array( 'type' => 'string' ),
+					'upload_url' => array( 'type' => 'string', 'description' => 'Give this link to the user.' ),
+					'expires_at' => array( 'type' => 'string' ),
+					'max_bytes'  => array( 'type' => 'integer' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ) {
+				return Agent_Publisher_Upload_Link::create( $input['alt_text'] ?? '' );
+			},
+			'permission_callback' => function () {
+				return current_user_can( 'upload_files' )
+					? true
+					: new WP_Error( 'agent_publisher_role', 'Your WordPress role can\'t upload files, so Claude can\'t add images for you. Ask a site administrator for a role that can (Author or above).', array( 'status' => 403 ) );
+			},
+			'meta'                => self::meta( false, false, false ),
+		) );
+
+		wp_register_ability( 'agent-publisher/get-upload', array(
+			'label'               => __( 'Check an upload link', 'acadium-agent-publisher' ),
+			'description'         => 'Returns the status of an upload link from request-upload: "pending" (the user hasn\'t uploaded yet), "expired", or "done" with the image (id, url, size, generated sizes, warnings). Call it after the user says they uploaded the image.',
+			'category'            => self::CATEGORY,
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array( 'upload_id' => array( 'type' => 'string' ) ),
+				'required'             => array( 'upload_id' ),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'status' => array( 'type' => 'string', 'enum' => array( 'pending', 'expired', 'done' ) ),
+					'image'  => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input ) {
+				return Agent_Publisher_Upload_Link::status( $input['upload_id'] );
+			},
+			'permission_callback' => function () {
+				return current_user_can( 'upload_files' );
+			},
+			'meta'                => self::meta( true, false, true ),
 		) );
 
 		wp_register_ability( 'agent-publisher/find-media', array(
@@ -482,7 +540,7 @@ final class Agent_Publisher_Abilities {
 		return (int) apply_filters( 'agent_publisher_max_upload', 10 * MB_IN_BYTES );
 	}
 
-	private static function upload_mimes() {
+	public static function upload_mimes() {
 		return (array) apply_filters( 'agent_publisher_upload_mimes', array(
 			'jpg|jpeg|jpe' => 'image/jpeg',
 			'png'          => 'image/png',
@@ -583,7 +641,7 @@ final class Agent_Publisher_Abilities {
 				'strict_image_checks'    => (bool) $s['image_checks_strict'],
 			),
 			'images'     => array(
-				'how_to_add'           => 'Prefer a public https url, or find-media for images the user uploaded to the Media Library (the way to use large images). data_base64 is only practical for small images (under about 100 KB); pass sha256 of the file to verify it arrived intact. Never reduce an image\'s resolution to make it fit through data_base64: if a full-size image is too large to send, ask the user to upload it (Media > Add New) and use find-media.',
+				'how_to_add'           => 'For a generic or illustrative image (the user did not supply or describe a specific picture), use a free stock photo: pass its direct https image URL (e.g. from Unsplash, Pexels or Wikimedia Commons; respect the license and credit the photographer in the post if it asks for that). Don\'t generate an image and send it as data_base64 unless the user asks for a custom graphic: it is slow and limited to small files. For the user\'s own image, call request-upload and give them the link. Prefer a public https url, or find-media for images already in the Media Library. data_base64 is only practical for small images (under about 100 KB); pass sha256 of the file to verify it arrived intact. Never reduce an image\'s resolution to make it fit through data_base64: if a full-size image is too large to send, ask the user to upload it (Media > Add New) and use find-media.',
 				'accepted_types'       => array_values( self::upload_mimes() ),
 				'max_upload_bytes'     => self::max_upload(),
 				'scaled_down_above_px' => (int) apply_filters( 'big_image_size_threshold', 2560, array( 0, 0 ), '', 0 ), // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core filter.
@@ -1011,7 +1069,7 @@ final class Agent_Publisher_Abilities {
 	}
 
 	/** An image attachment: id, url, dimensions, alt text and the sizes WordPress generated. */
-	private static function image_info( $id ) {
+	public static function image_info( $id ) {
 		$meta  = wp_get_attachment_metadata( $id );
 		$sizes = array();
 		foreach ( array_keys( (array) ( $meta['sizes'] ?? array() ) ) as $name ) {

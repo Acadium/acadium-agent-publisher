@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.9.0-beta1
+Stable tag: 1.9.0-beta2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -61,6 +61,8 @@ Publishing can trigger things that unpublishing cannot undo, such as subscriber 
 * `agent-publisher/update-draft-post`
 * `agent-publisher/upload-media`
 * `agent-publisher/find-media` (read-only: find images in the Media Library)
+* `agent-publisher/request-upload` (a one-time link where the user uploads their own image)
+* `agent-publisher/get-upload` (read-only: the image from an upload link)
 * `agent-publisher/submit-for-review`
 * `agent-publisher/publish-post` (publish now or schedule)
 * `agent-publisher/unpublish-post`
@@ -135,6 +137,10 @@ Check that "Allow OAuth connections" is on and that `https://your-site/.well-kno
 Your web server may be removing the Authorization header, which is common with Apache and CGI/FastCGI. Add `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1` to your .htaccess, and make sure security plugins allow Application Passwords and REST API access for logged-in users.
 
 == Changelog ==
+
+= 1.9.0-beta2 =
+* Upload links: request-upload gives Claude a one-time page (valid 30 minutes) where the user drops their own image; it goes into the Media Library under their name at full size, and get-upload returns it. No settings; needs a role that can upload files.
+* Claude is told to use free stock photo URLs for generic images instead of generating an image and sending it as base64, and to use an upload link for the user's own images.
 
 = 1.9.0-beta1 =
 * Staff connect Claude with their own WordPress accounts: posts Claude writes are credited to and owned by the person who connected it. No AI Agent user or administrator approval needed; anyone who can write posts can connect (filter agent_publisher_can_connect to limit it).
