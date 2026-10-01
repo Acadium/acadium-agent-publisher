@@ -411,7 +411,7 @@ final class Agent_Publisher_Setup {
 
 	private static function notices() {
 		$messages = array(
-			'agent_created'     => __( 'AI Agent user created. It has no password you need to know: Claude connects with the steps below.', 'acadium-agent-publisher' ),
+			'agent_created'     => __( 'AI Agent user created. Now create an Application Password for it below.', 'acadium-agent-publisher' ),
 			'oauth_enabled'     => __( 'OAuth connections are on. You can now add this site to Claude as a connector.', 'acadium-agent-publisher' ),
 			'auth_header_fixed' => __( 'Added the Authorization header rule to .htaccess.', 'acadium-agent-publisher' ),
 			'rechecked'         => __( 'Checks ran again.', 'acadium-agent-publisher' ),
@@ -439,21 +439,12 @@ final class Agent_Publisher_Setup {
 
 		<ol class="agent-publisher-steps" style="max-width:60em;">
 			<li>
-				<p><strong><?php esc_html_e( 'A user for Claude', 'acadium-agent-publisher' ); ?></strong></p>
-				<?php if ( $agents ) : ?>
-					<p>
-						<span class="dashicons dashicons-yes-alt" style="color:#008a20;"></span>
-						<?php
-						echo esc_html( implode( ', ', array_map( function ( $u ) {
-							return $u->display_name . ' (' . $u->user_login . ')';
-						}, $agents ) ) );
-						?>
-						<span class="description"><?php esc_html_e( '— role "AI Agent"', 'acadium-agent-publisher' ); ?></span>
-					</p>
-				<?php else : ?>
-					<p class="description"><?php esc_html_e( 'Claude signs in as its own user with the AI Agent role, so everything it does is labelled and limited by the rules on this page.', 'acadium-agent-publisher' ); ?></p>
-					<?php self::action_button( 'create_agent', __( 'Create AI Agent user', 'acadium-agent-publisher' ) ); ?>
-				<?php endif; ?>
+				<p><strong><?php esc_html_e( 'Who can connect', 'acadium-agent-publisher' ); ?></strong></p>
+				<p>
+					<span class="dashicons dashicons-yes-alt" style="color:#008a20;"></span>
+					<?php esc_html_e( 'Everyone who can write posts on this site (Contributors and up). Each person connects Claude with their own WordPress account, and the posts Claude writes are credited to them and owned by them. Nothing to set up.', 'acadium-agent-publisher' ); ?>
+				</p>
+				<p class="description"><?php esc_html_e( 'Claude gets limited permissions, never more than the person\'s own role: it works on their own posts only, can\'t change settings or other people\'s posts, and follows the site rule below.', 'acadium-agent-publisher' ); ?></p>
 			</li>
 			<li>
 				<p><strong><?php esc_html_e( 'What Claude may do', 'acadium-agent-publisher' ); ?></strong></p>
@@ -475,10 +466,10 @@ final class Agent_Publisher_Setup {
 					<ol>
 						<li><?php esc_html_e( 'In Claude Desktop, open Settings > Connectors and click "Add custom connector".', 'acadium-agent-publisher' ); ?></li>
 						<li><?php esc_html_e( 'Enter a name (e.g. the site name), paste the connection URL and click Add.', 'acadium-agent-publisher' ); ?></li>
-						<li><?php esc_html_e( 'Click Connect. This site\'s login page opens: log in as an administrator.', 'acadium-agent-publisher' ); ?></li>
-						<li><?php esc_html_e( 'Under "Act as", choose the AI Agent user and click Allow.', 'acadium-agent-publisher' ); ?></li>
+						<li><?php esc_html_e( 'Click Connect. This site\'s login page opens: log in with your own WordPress account.', 'acadium-agent-publisher' ); ?></li>
+						<li><?php esc_html_e( 'Check what Claude may do and click Allow.', 'acadium-agent-publisher' ); ?></li>
 					</ol>
-					<p class="description"><?php esc_html_e( 'In a chat, turn the connector on from the tools menu. On Claude Team and Enterprise plans, an owner may need to allow custom connectors first.', 'acadium-agent-publisher' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Share these steps and the connection URL with your staff. In a chat, turn the connector on from the tools menu. On Claude Team and Enterprise plans, an owner may need to allow custom connectors first.', 'acadium-agent-publisher' ); ?></p>
 				<?php endif; ?>
 				<?php self::render_extension( $agents ); ?>
 			</li>
@@ -504,7 +495,8 @@ final class Agent_Publisher_Setup {
 						<?php if ( self::$new_password ) : ?>
 							<?php self::render_credentials( self::$new_password ); ?>
 						<?php elseif ( ! $agents ) : ?>
-							<?php esc_html_e( 'Create the AI Agent user first (step 1), then create an Application Password here.', 'acadium-agent-publisher' ); ?>
+							<?php esc_html_e( 'The extension signs in as a shared AI Agent user with an Application Password (posts are credited to that user). Create the user first:', 'acadium-agent-publisher' ); ?><br />
+							<?php self::action_button( 'create_agent', __( 'Create AI Agent user', 'acadium-agent-publisher' ), false ); ?>
 						<?php else : ?>
 							<?php esc_html_e( 'Create an Application Password for the AI Agent user. It is shown once.', 'acadium-agent-publisher' ); ?><br />
 							<?php foreach ( $agents as $agent ) : ?>

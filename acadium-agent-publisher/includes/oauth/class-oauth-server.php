@@ -36,6 +36,9 @@ final class Agent_Publisher_OAuth_Server {
 	/** User authenticated by a bearer token in this request (0 if none). */
 	private static $bearer_user = 0;
 
+	/** True while checking someone's own capabilities without the connection cap. */
+	private static $uncapped = false;
+
 	public static function init() {
 		add_action( 'plugins_loaded', array( 'Agent_Publisher_OAuth_Store', 'maybe_install' ) );
 		add_action( 'parse_request', array( __CLASS__, 'route' ), 0 );
@@ -43,6 +46,7 @@ final class Agent_Publisher_OAuth_Server {
 		add_filter( 'determine_current_user', array( __CLASS__, 'bearer_user' ), 30 );
 		add_filter( 'rest_post_dispatch', array( __CLASS__, 'challenge' ), 10, 3 );
 		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'restrict_token_routes' ), 0, 3 );
+		add_filter( 'user_has_cap', array( __CLASS__, 'cap_connection' ), 999, 4 );
 		add_action( 'admin_post_agent_publisher_revoke_grant', array( __CLASS__, 'admin_revoke_grant' ) );
 	}
 
@@ -51,8 +55,10 @@ final class Agent_Publisher_OAuth_Server {
 	/* ------------------------------------------------------------------ */
 
 	/**
-	 * determine_current_user: a valid access token logs the request in as its
-	 * AI Agent user, but only for the MCP and Abilities REST routes.
+	 * determine_current_user: a valid access token logs the request in as the
+	 * user it was issued for (the person who connected Claude, or an AI Agent
+	 * user), but only for the MCP and Abilities REST routes. A person's
+	 * capabilities are then capped to the AI Agent's (cap_connection()).
 	 */
 	public static function bearer_user( $user_id ) {
 		if ( $user_id || ! self::enabled() ) {
@@ -69,12 +75,46 @@ final class Agent_Publisher_OAuth_Server {
 		}
 		$token_user = Agent_Publisher_OAuth_Store::user_for_access_token( trim( substr( $header, 7 ) ) );
 		$user       = $token_user ? get_userdata( $token_user ) : false;
-		if ( $user && Agent_Publisher_Policy::is_agent_user( $user ) ) {
+		if ( $user && Agent_Publisher_Policy::can_connect( $user ) ) {
 			self::$bearer_user = $user->ID;
 			return $user->ID;
 		}
 		self::$invalid_token = true;
 		return $user_id;
+	}
+
+	/** Is the current request authenticated by a Claude connection (bearer token)? */
+	public static function via_connection() {
+		return self::$bearer_user && get_current_user_id() === self::$bearer_user;
+	}
+
+	/**
+	 * user_has_cap: through a Claude connection, a person can do no more than
+	 * an AI Agent user (read, edit_posts, delete_posts, upload_files), and no
+	 * more than their own role. So an Editor's or Administrator's Claude can't
+	 * touch other people's posts, settings or unfiltered HTML. Publishing and
+	 * editing live posts go through the plugin's abilities, which check the
+	 * site mode and the person's own role (Agent_Publisher_Policy::can_publish()).
+	 */
+	public static function cap_connection( $allcaps, $caps, $args, $user ) {
+		if ( self::$uncapped || ! self::$bearer_user || ! $user || (int) $user->ID !== self::$bearer_user ) {
+			return $allcaps;
+		}
+		if ( array( Agent_Publisher_Policy::ROLE ) === array_values( (array) $user->roles ) ) {
+			return $allcaps; // AI Agent users only have these capabilities anyway.
+		}
+		return array_intersect_key( $allcaps, array_filter( Agent_Publisher_Policy::ROLE_CAPS ) );
+	}
+
+	/** Run $callback with the user's own capabilities (no connection cap). */
+	public static function uncapped( callable $callback ) {
+		$previous       = self::$uncapped;
+		self::$uncapped = true;
+		try {
+			return $callback();
+		} finally {
+			self::$uncapped = $previous;
+		}
 	}
 
 	/** Authoritative check on the route WordPress actually dispatches (batch sub-requests included). */
@@ -367,22 +407,31 @@ final class Agent_Publisher_OAuth_Server {
 			wp_safe_redirect( wp_login_url( self::current_url() ) );
 			exit;
 		}
-		if ( ! current_user_can( 'manage_options' ) ) {
-			self::page_error( __( 'Only a site administrator can approve a connection. Log in as an administrator and try again.', 'acadium-agent-publisher' ) );
+		$me = wp_get_current_user();
+		if ( ! Agent_Publisher_Policy::can_connect( $me ) ) {
+			self::page_error( __( 'Your account can\'t write posts on this site, so it can\'t connect Claude. Ask a site administrator for an account that can.', 'acadium-agent-publisher' ) );
 		}
 
-		$agents = array_values( array_filter( get_users( array( 'role' => Agent_Publisher_Policy::ROLE, 'orderby' => 'display_name' ) ), array( 'Agent_Publisher_Policy', 'is_agent_user' ) ) );
+		// Administrators may still connect Claude as an AI Agent user instead of themselves.
+		$agents = current_user_can( 'manage_options' )
+			? array_values( array_filter( get_users( array( 'role' => Agent_Publisher_Policy::ROLE, 'orderby' => 'display_name' ) ), array( 'Agent_Publisher_Policy', 'is_agent_user' ) ) )
+			: array();
 
 		if ( 'POST' === self::method() ) {
 			if ( ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ), 'agent_publisher_authorize_' . $client_id ) ) {
 				self::page_error( __( 'This approval form has expired. Start the connection again from the app.', 'acadium-agent-publisher' ) );
 			}
 			if ( 'allow' !== self::param( 'decision' ) ) {
-				self::redirect_error( $redirect_uri, 'access_denied', 'The administrator denied the request.', $state );
+				self::redirect_error( $redirect_uri, 'access_denied', 'The user denied the request.', $state );
 			}
-			$agent = get_userdata( absint( self::param( 'agent_user' ) ) );
-			if ( ! $agent || ! Agent_Publisher_Policy::is_agent_user( $agent ) ) {
-				self::page_error( __( 'Choose a user with the AI Agent role.', 'acadium-agent-publisher' ) );
+			// Posts are credited to the person approving, unless an administrator picked an AI Agent user.
+			$credit = self::param( 'credit_to' );
+			$agent  = $me;
+			if ( '' !== $credit && 'self' !== $credit ) {
+				$agent = get_userdata( absint( $credit ) );
+				if ( ! $agent || ! current_user_can( 'manage_options' ) || ! Agent_Publisher_Policy::is_agent_user( $agent ) ) {
+					self::page_error( __( 'Choose yourself or a user with the AI Agent role.', 'acadium-agent-publisher' ) );
+				}
 			}
 			$code = Agent_Publisher_OAuth_Store::create_code( $client_id, $agent->ID, array(
 				'redirect_uri' => $redirect_uri,
@@ -510,27 +559,37 @@ ul{padding-left:20px}select{width:100%;padding:6px;font-size:15px;margin:6px 0 1
 			echo esc_html( sprintf( __( 'After approval you return to %s.', 'acadium-agent-publisher' ), $host ) );
 			?>
 		</p>
-		<?php if ( ! $agents ) : ?>
-			<div class="warn"><?php esc_html_e( 'There is no user with the AI Agent role yet. Click "Create AI Agent user" under Settings > Agent Publisher, then connect again.', 'acadium-agent-publisher' ); ?></div>
-			<?php self::page_close(); ?>
-		<?php endif; ?>
-		<p><?php esc_html_e( 'It will act as an AI Agent user, not as you, and can:', 'acadium-agent-publisher' ); ?></p>
+		<?php
+		$me   = wp_get_current_user();
+		$type = get_post_type_object( 'post' );
+		?>
+		<p>
+			<?php
+			/* translators: %s: the user's display name. */
+			printf( esc_html__( 'Claude will work as you, %s, with limited permissions. The posts it writes are yours: they are credited to you, and you can edit them in WordPress.', 'acadium-agent-publisher' ), '<strong>' . esc_html( $me->display_name ) . '</strong>' );
+			?>
+		</p>
+		<p><?php esc_html_e( 'It can:', 'acadium-agent-publisher' ); ?></p>
 		<ul>
-			<li><?php esc_html_e( 'create and edit its own drafts, upload images, and read categories and tags', 'acadium-agent-publisher' ); ?></li>
+			<li><?php esc_html_e( 'create and edit your drafts, and read categories and tags', 'acadium-agent-publisher' ); ?></li>
+			<?php if ( current_user_can( 'upload_files' ) ) : ?>
+				<li><?php esc_html_e( 'upload images', 'acadium-agent-publisher' ); ?></li>
+			<?php endif; ?>
 			<?php if ( Agent_Publisher_Policy::allows( 'review' ) ) : ?>
-				<li><?php esc_html_e( 'submit its drafts for review', 'acadium-agent-publisher' ); ?></li>
+				<li><?php esc_html_e( 'submit your drafts for review', 'acadium-agent-publisher' ); ?></li>
 			<?php endif; ?>
-			<?php if ( Agent_Publisher_Policy::allows( 'publish' ) ) : ?>
-				<li><strong><?php esc_html_e( 'publish, schedule and unpublish its own posts', 'acadium-agent-publisher' ); ?></strong></li>
+			<?php if ( Agent_Publisher_Policy::allows( 'publish' ) && Agent_Publisher_Policy::can_publish( $type ) ) : ?>
+				<li><strong><?php esc_html_e( 'publish, schedule and unpublish your posts', 'acadium-agent-publisher' ); ?></strong></li>
 			<?php endif; ?>
-			<?php if ( Agent_Publisher_Policy::allows( 'publish_edit' ) ) : ?>
-				<li><strong><?php esc_html_e( 'change its own posts after they are live', 'acadium-agent-publisher' ); ?></strong></li>
+			<?php if ( Agent_Publisher_Policy::allows( 'publish_edit' ) && Agent_Publisher_Policy::can_edit_published( $type ) ) : ?>
+				<li><strong><?php esc_html_e( 'change your posts after they are live', 'acadium-agent-publisher' ); ?></strong></li>
 			<?php endif; ?>
 		</ul>
+		<p class="muted"><?php esc_html_e( 'It can\'t change other people\'s posts or site settings, and scripts are removed from what it writes.', 'acadium-agent-publisher' ); ?></p>
 		<p class="muted">
 			<?php
 			/* translators: %s: publishing mode, e.g. "Drafts only". */
-			echo esc_html( sprintf( __( 'Current mode: %s (Settings > Agent Publisher). You can disconnect it there at any time.', 'acadium-agent-publisher' ), $labels[ $mode ] ) );
+			echo esc_html( sprintf( __( 'Site rule: %s. Administrators can change it and disconnect any connection under Settings > Agent Publisher.', 'acadium-agent-publisher' ), $labels[ $mode ] ) );
 			?>
 		</p>
 		<form method="post" action="<?php echo esc_url( self::endpoint( 'authorize' ) ); ?>">
@@ -538,12 +597,22 @@ ul{padding-left:20px}select{width:100%;padding:6px;font-size:15px;margin:6px 0 1
 			<?php foreach ( array( 'response_type', 'client_id', 'redirect_uri', 'code_challenge', 'code_challenge_method', 'state', 'resource', 'scope' ) as $field ) : ?>
 				<input type="hidden" name="<?php echo esc_attr( $field ); ?>" value="<?php echo esc_attr( self::raw_param( $field ) ); ?>" />
 			<?php endforeach; ?>
-			<label for="agent_user"><strong><?php esc_html_e( 'Act as', 'acadium-agent-publisher' ); ?></strong></label>
-			<select id="agent_user" name="agent_user">
-				<?php foreach ( $agents as $agent ) : ?>
-					<option value="<?php echo esc_attr( $agent->ID ); ?>"><?php echo esc_html( $agent->display_name . ' (' . $agent->user_login . ')' ); ?></option>
-				<?php endforeach; ?>
-			</select>
+			<?php if ( $agents ) : ?>
+				<label for="credit_to"><strong><?php esc_html_e( 'Credit posts to', 'acadium-agent-publisher' ); ?></strong></label>
+				<select id="credit_to" name="credit_to">
+					<option value="self">
+						<?php
+						/* translators: %s: the user's display name. */
+						echo esc_html( sprintf( __( 'You (%s)', 'acadium-agent-publisher' ), $me->display_name ) );
+						?>
+					</option>
+					<?php foreach ( $agents as $agent ) : ?>
+						<option value="<?php echo esc_attr( $agent->ID ); ?>"><?php echo esc_html( $agent->display_name . ' (' . $agent->user_login . ')' ); ?></option>
+					<?php endforeach; ?>
+				</select>
+			<?php else : ?>
+				<input type="hidden" name="credit_to" value="self" />
+			<?php endif; ?>
 			<div class="buttons">
 				<button type="submit" name="decision" value="deny" class="deny"><?php esc_html_e( 'Deny', 'acadium-agent-publisher' ); ?></button>
 				<button type="submit" name="decision" value="allow" class="allow"><?php esc_html_e( 'Allow', 'acadium-agent-publisher' ); ?></button>
@@ -636,8 +705,8 @@ ul{padding-left:20px}select{width:100%;padding:6px;font-size:15px;margin:6px 0 1
 
 	private static function require_agent( $user_id ) {
 		$user = get_userdata( $user_id );
-		if ( ! $user || ! Agent_Publisher_Policy::is_agent_user( $user ) ) {
-			self::oauth_error( 'invalid_grant', 'The connected user no longer has the AI Agent role.' );
+		if ( ! $user || ! Agent_Publisher_Policy::can_connect( $user ) ) {
+			self::oauth_error( 'invalid_grant', 'The connected user can no longer write posts on this site.' );
 		}
 	}
 

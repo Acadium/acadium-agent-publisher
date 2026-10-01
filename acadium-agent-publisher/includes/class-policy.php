@@ -63,7 +63,8 @@ final class Agent_Publisher_Policy {
 			'require_featured_image' => false,
 			'allowed_categories'     => array(),
 			'daily_limit'            => 0,
-			'oauth_enabled'          => false,
+			// On by default: staff connect Claude with their own accounts, no setup needed.
+			'oauth_enabled'          => true,
 			'image_min_width'        => 0,
 			'image_aspect_ratios'    => '',
 			'image_guidance'         => '',
@@ -223,6 +224,54 @@ final class Agent_Publisher_Policy {
 		return (int) ( $meta['width'] ?? 0 ) < self::min_image_width() ? $warnings : array();
 	}
 
+	/**
+	 * May this user connect Claude with their own account? Anyone who can
+	 * write posts (Contributor and up), plus AI Agent users. Filterable, e.g.
+	 * to limit connecting to certain roles.
+	 */
+	public static function can_connect( $user ) {
+		if ( ! $user instanceof WP_User || ! $user->exists() ) {
+			return false;
+		}
+		if ( self::is_agent_user( $user ) ) {
+			return true;
+		}
+		$can = Agent_Publisher_OAuth_Server::uncapped( function () use ( $user ) {
+			return user_can( $user, 'edit_posts' );
+		} );
+		return (bool) apply_filters( 'agent_publisher_can_connect', $can, $user );
+	}
+
+	/**
+	 * Is this request Claude working for someone: an AI Agent user, or a
+	 * person's own account through a Claude connection? Such requests get the
+	 * agent rules (own posts only, the site's mode and checks).
+	 */
+	public static function acting_for_agent() {
+		return self::is_agent_user() || Agent_Publisher_OAuth_Server::via_connection();
+	}
+
+	/** The current user's own capability, ignoring the cap a Claude connection puts on it. */
+	public static function user_can_own( $cap, ...$args ) {
+		return Agent_Publisher_OAuth_Server::uncapped( function () use ( $cap, $args ) {
+			return current_user_can( $cap, ...$args );
+		} );
+	}
+
+	/**
+	 * May the current user publish posts of this type (mode permitting)? AI
+	 * Agent users always may (the mode decides); people only if their own
+	 * WordPress role allows it, e.g. not Contributors.
+	 */
+	public static function can_publish( $type ) {
+		return self::is_agent_user() || ( $type && self::user_can_own( $type->cap->publish_posts ) );
+	}
+
+	/** May the current user change their live posts (mode permitting)? */
+	public static function can_edit_published( $type ) {
+		return self::is_agent_user() || ( $type && self::user_can_own( $type->cap->edit_published_posts ) );
+	}
+
 	/** True if the site's mode is at least $mode. */
 	public static function allows( $mode ) {
 		return array_search( self::mode(), self::MODES, true ) >= array_search( $mode, self::MODES, true );
@@ -330,6 +379,8 @@ final class Agent_Publisher_Policy {
 		$log[] = array(
 			'time'    => time(),
 			'user'    => get_current_user_id(),
+			// A person's own account working through Claude (AI Agent users are always Claude).
+			'via'     => Agent_Publisher_OAuth_Server::via_connection() && ! self::is_agent_user() ? 'claude' : '',
 			'action'  => $action,
 			'post'    => (int) $post_id,
 			'title'   => $post_id ? wp_strip_all_tags( get_the_title( $post_id ) ) : '',

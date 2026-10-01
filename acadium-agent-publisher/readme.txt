@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.8.0
+Stable tag: 1.9.0-beta1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -135,6 +135,12 @@ Check that "Allow OAuth connections" is on and that `https://your-site/.well-kno
 Your web server may be removing the Authorization header, which is common with Apache and CGI/FastCGI. Add `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1` to your .htaccess, and make sure security plugins allow Application Passwords and REST API access for logged-in users.
 
 == Changelog ==
+
+= 1.9.0-beta1 =
+* Staff connect Claude with their own WordPress accounts: posts Claude writes are credited to and owned by the person who connected it. No AI Agent user or administrator approval needed; anyone who can write posts can connect (filter agent_publisher_can_connect to limit it).
+* Through a connection, a person's capabilities are capped to the AI Agent's (own posts only, no settings, no unfiltered HTML) and never exceed their own role: publishing needs both the site mode and the person's own publish right.
+* Connector sign-in (OAuth) is on by default for new installs.
+* Administrators can still connect Claude as an AI Agent user ("Credit posts to"). The activity log shows "(via Claude)".
 
 = 1.8.0 =
 * Featured images under the minimum width are refused when publishing or replacing a live post's image, by default (Settings > Agent Publisher > Images; untick to allow them with a warning).

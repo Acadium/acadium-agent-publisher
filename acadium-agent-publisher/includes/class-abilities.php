@@ -254,8 +254,11 @@ final class Agent_Publisher_Abilities {
 				if ( ! $type || ! current_user_can( $type->cap->edit_posts ) ) {
 					return false;
 				}
-				// Other users publish only if WordPress lets them.
-				return 'publish' !== $status || Agent_Publisher_Policy::is_agent_user() || current_user_can( $type->cap->publish_posts );
+				// People publish only if their own role lets them (AI Agent users: the mode decides).
+				if ( 'publish' === $status && ! Agent_Publisher_Policy::can_publish( $type ) ) {
+					return new WP_Error( 'agent_publisher_role', 'Your WordPress role can\'t publish posts, so Claude can\'t publish them for you. Create a draft or submit it for review instead.', array( 'status' => 403 ) );
+				}
+				return true;
 			},
 			'meta'                => self::meta( false, false, false ),
 		) );
@@ -319,11 +322,12 @@ final class Agent_Publisher_Abilities {
 					return Agent_Publisher_Policy::not_allowed( 'publish posts', 'publish' );
 				}
 				$ok = self::can_manage( $input['id'] ?? 0 );
-				if ( true !== $ok || Agent_Publisher_Policy::is_agent_user() ) {
+				if ( true !== $ok ) {
 					return $ok;
 				}
-				$type = get_post_type_object( get_post_type( (int) $input['id'] ) );
-				return $type && current_user_can( $type->cap->publish_posts );
+				return Agent_Publisher_Policy::can_publish( get_post_type_object( get_post_type( (int) $input['id'] ) ) )
+					? true
+					: new WP_Error( 'agent_publisher_role', 'Your WordPress role can\'t publish posts, so Claude can\'t publish them for you.', array( 'status' => 403 ) );
 			},
 			'meta'                => self::meta( false, true, false ),
 		) );
@@ -339,7 +343,13 @@ final class Agent_Publisher_Abilities {
 				if ( ! Agent_Publisher_Policy::allows( 'publish' ) ) {
 					return Agent_Publisher_Policy::not_allowed( 'unpublish posts', 'publish' );
 				}
-				return self::can_manage( $input['id'] ?? 0 );
+				$ok = self::can_manage( $input['id'] ?? 0 );
+				if ( true !== $ok ) {
+					return $ok;
+				}
+				return Agent_Publisher_Policy::can_publish( get_post_type_object( get_post_type( (int) $input['id'] ) ) )
+					? true
+					: new WP_Error( 'agent_publisher_role', 'Your WordPress role can\'t publish or unpublish posts.', array( 'status' => 403 ) );
 			},
 			'meta'                => self::meta( false, true, false ),
 		) );
@@ -365,7 +375,13 @@ final class Agent_Publisher_Abilities {
 				if ( ! empty( $input['featured_image'] ) && ! current_user_can( 'upload_files' ) ) {
 					return false;
 				}
-				return self::can_manage( $input['id'] ?? 0 );
+				$ok = self::can_manage( $input['id'] ?? 0 );
+				if ( true !== $ok ) {
+					return $ok;
+				}
+				return Agent_Publisher_Policy::can_edit_published( get_post_type_object( get_post_type( (int) $input['id'] ) ) )
+					? true
+					: new WP_Error( 'agent_publisher_role', 'Your WordPress role can\'t edit published posts.', array( 'status' => 403 ) );
 			},
 			'meta'                => self::meta( false, true, false ),
 		) );
@@ -508,7 +524,7 @@ final class Agent_Publisher_Abilities {
 		if ( ! $post || ! in_array( $post->post_type, self::post_types(), true ) ) {
 			return new WP_Error( 'agent_publisher_not_found', 'No such post.', array( 'status' => 404 ) );
 		}
-		if ( current_user_can( 'edit_post', $post->ID ) || ( Agent_Publisher_Policy::is_agent_user() && (int) $post->post_author === get_current_user_id() ) ) {
+		if ( current_user_can( 'edit_post', $post->ID ) || ( Agent_Publisher_Policy::acting_for_agent() && (int) $post->post_author === get_current_user_id() ) ) {
 			return true;
 		}
 		return new WP_Error( 'agent_publisher_not_yours', 'You can only read your own posts.', array( 'status' => 403 ) );
@@ -525,7 +541,7 @@ final class Agent_Publisher_Abilities {
 		if ( ! $post || ! in_array( $post->post_type, self::post_types(), true ) ) {
 			return new WP_Error( 'agent_publisher_not_found', 'No such post.', array( 'status' => 404 ) );
 		}
-		if ( Agent_Publisher_Policy::is_agent_user() ? (int) $post->post_author === get_current_user_id() : current_user_can( 'edit_post', $post->ID ) ) {
+		if ( Agent_Publisher_Policy::acting_for_agent() ? (int) $post->post_author === get_current_user_id() : current_user_can( 'edit_post', $post->ID ) ) {
 			return true;
 		}
 		return new WP_Error( 'agent_publisher_not_yours', 'You can only change your own posts.', array( 'status' => 403 ) );
@@ -538,6 +554,7 @@ final class Agent_Publisher_Abilities {
 	public static function get_capabilities() {
 		$s     = Agent_Publisher_Policy::settings();
 		$user  = wp_get_current_user();
+		$type  = get_post_type_object( self::post_types()[0] );
 		$names = array();
 		foreach ( $s['allowed_categories'] as $id ) {
 			$term = get_term( $id, 'category' );
@@ -553,10 +570,10 @@ final class Agent_Publisher_Abilities {
 				'update_drafts'     => true,
 				'upload_media'      => current_user_can( 'upload_files' ),
 				'submit_for_review' => Agent_Publisher_Policy::allows( 'review' ),
-				'publish'           => Agent_Publisher_Policy::allows( 'publish' ),
-				'schedule'          => Agent_Publisher_Policy::allows( 'publish' ),
-				'unpublish'         => Agent_Publisher_Policy::allows( 'publish' ),
-				'edit_published'    => Agent_Publisher_Policy::allows( 'publish_edit' ),
+				'publish'           => Agent_Publisher_Policy::allows( 'publish' ) && Agent_Publisher_Policy::can_publish( $type ),
+				'schedule'          => Agent_Publisher_Policy::allows( 'publish' ) && Agent_Publisher_Policy::can_publish( $type ),
+				'unpublish'         => Agent_Publisher_Policy::allows( 'publish' ) && Agent_Publisher_Policy::can_publish( $type ),
+				'edit_published'    => Agent_Publisher_Policy::allows( 'publish_edit' ) && Agent_Publisher_Policy::can_edit_published( $type ),
 			),
 			'checks'     => array(
 				'require_featured_image' => (bool) $s['require_featured_image'],
@@ -581,9 +598,10 @@ final class Agent_Publisher_Abilities {
 				),
 			),
 			'user'       => array(
-				'id'    => (int) $user->ID,
-				'name'  => $user->display_name,
-				'roles' => array_values( $user->roles ),
+				'id'           => (int) $user->ID,
+				'name'         => $user->display_name,
+				'roles'        => array_values( $user->roles ),
+				'posts_credit' => 'Posts you create are credited to ' . $user->display_name . ' and owned by them' . ( Agent_Publisher_Policy::is_agent_user() ? ' (an AI Agent user).' : ': they can edit them in WordPress.' ),
 			),
 		);
 	}

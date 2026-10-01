@@ -237,7 +237,7 @@ final class Agent_Publisher_Settings_Page {
 								<input type="checkbox" name="<?php echo esc_attr( $name ); ?>[oauth_enabled]" value="1" <?php checked( $s['oauth_enabled'] ); ?> />
 								<?php esc_html_e( 'Allow OAuth connections', 'acadium-agent-publisher' ); ?>
 							</label>
-							<p class="description"><?php esc_html_e( 'Lets you add this site as a custom connector in Claude Desktop, claude.ai and the Claude mobile apps, without an Application Password. Each connection must be approved by an administrator, who picks the AI Agent user it acts as.', 'acadium-agent-publisher' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Lets staff add this site as a custom connector in Claude Desktop, claude.ai and the Claude mobile apps. Each person connects with their own WordPress account, and the posts Claude writes are credited to them. On by default.', 'acadium-agent-publisher' ); ?></p>
 							<?php if ( $s['oauth_enabled'] ) : ?>
 								<p><?php esc_html_e( 'Connector URL:', 'acadium-agent-publisher' ); ?> <code><?php echo esc_html( Agent_Publisher_OAuth_Server::resource() ); ?></code></p>
 							<?php endif; ?>
@@ -281,7 +281,7 @@ final class Agent_Publisher_Settings_Page {
 			<thead>
 				<tr>
 					<th><?php esc_html_e( 'App', 'acadium-agent-publisher' ); ?></th>
-					<th><?php esc_html_e( 'Acts as', 'acadium-agent-publisher' ); ?></th>
+					<th><?php esc_html_e( 'Credited to', 'acadium-agent-publisher' ); ?></th>
 					<th><?php esc_html_e( 'Approved', 'acadium-agent-publisher' ); ?></th>
 					<th><?php esc_html_e( 'Last used', 'acadium-agent-publisher' ); ?></th>
 					<th></th>
@@ -335,7 +335,7 @@ final class Agent_Publisher_Settings_Page {
 			<thead>
 				<tr>
 					<th><?php esc_html_e( 'When', 'acadium-agent-publisher' ); ?></th>
-					<th><?php esc_html_e( 'Agent', 'acadium-agent-publisher' ); ?></th>
+					<th><?php esc_html_e( 'By', 'acadium-agent-publisher' ); ?></th>
 					<th><?php esc_html_e( 'Action', 'acadium-agent-publisher' ); ?></th>
 					<th><?php esc_html_e( 'Post', 'acadium-agent-publisher' ); ?></th>
 				</tr>
@@ -348,7 +348,7 @@ final class Agent_Publisher_Settings_Page {
 					?>
 					<tr>
 						<td><?php echo esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $e['time'] ) ); ?></td>
-						<td><?php echo esc_html( $user ? $user->display_name : '#' . (int) $e['user'] ); ?></td>
+						<td><?php echo esc_html( ( $user ? $user->display_name : '#' . (int) $e['user'] ) . ( ! empty( $e['via'] ) ? ' ' . __( '(via Claude)', 'acadium-agent-publisher' ) : '' ) ); ?></td>
 						<td><?php echo esc_html( $actions[ $e['action'] ] ?? $e['action'] ); ?><?php echo 'schedule' === $e['action'] && $e['detail'] ? ' (' . esc_html( $e['detail'] ) . ')' : ''; ?></td>
 						<td>
 							<?php if ( $link ) : ?>

@@ -23,13 +23,13 @@ About 5 minutes, all in the **WordPress admin** and **Claude Desktop**.
 
 Activating it adds a user role called **AI Agent** and a settings page under **Settings → Agent Publisher**. If the site uses "Plain" permalinks, a notice offers a one-click switch to "Post name": the connection needs pretty permalinks.
 
-### Step 2: Set up the connection in WordPress
+### Step 2: Share the connection URL
 
-Go to **Settings → Agent Publisher**. The **Connect Claude** section at the top walks you through it:
+There's nothing to set up. Go to **Settings → Agent Publisher** and click **Copy** next to the **Connection URL** (it looks like `https://your-site.com/wp-json/acadium-agent-publisher/mcp`), and share it with your staff.
 
-1. Click **Create AI Agent user**. This adds a user named `claude` with only the AI Agent role: Claude signs in as this user, so everything it does is labelled and limited by your rules.
-2. Check **What Claude may do**. It starts on **Drafts only**; you can change it any time (see [Publishing modes](#publishing-modes)).
-3. Click **Turn on OAuth connections**, then click **Copy** next to the **Connection URL**. It looks like `https://your-site.com/wp-json/acadium-agent-publisher/mcp`.
+- **Everyone who can write posts** (Contributors and up) connects Claude with **their own WordPress account**. Posts Claude writes are **credited to them and owned by them**: they appear under their name and they can edit them in WordPress.
+- Claude gets **limited permissions**, never more than the person's own role: their own posts only, no settings, no other people's posts, scripts removed. A Contributor's Claude writes drafts; an Author's can publish when the site allows it.
+- The site rule starts at **Drafts only**: Claude writes drafts and each person reviews and publishes their own. Change it under **What agents may do** (see [Publishing modes](#publishing-modes)).
 
 Below that, **Connection checks** tests the things that usually break connections (HTTPS, permalinks, the connection URL, the Authorization header, connector sign-in) and says how to fix anything that fails, with a one-click fix where possible.
 
@@ -37,8 +37,8 @@ Below that, **Connection checks** tests the things that usually break connection
 
 1. In **Claude Desktop**, open **Settings → Connectors** and click **Add custom connector**.
 2. Enter a name (e.g. your site's name), paste the connection URL and click **Add**.
-3. Click **Connect**. Your WordPress login page opens: **log in as an administrator**.
-4. On the approval screen, choose **Claude (claude)** under *Act as* and click **Allow**.
+3. Click **Connect**. Your WordPress login page opens: **log in with your own account**.
+4. The approval screen shows what Claude may do for you. Click **Allow**.
 
 You're back in Claude Desktop and the connector shows as connected. There's nothing to install and no password to copy. The same connector also works in **claude.ai** and the **Claude mobile app** (same Claude account).
 
