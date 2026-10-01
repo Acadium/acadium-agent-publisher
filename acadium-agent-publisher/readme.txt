@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.9.0-beta4
+Stable tag: 1.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -136,22 +136,13 @@ Your web server may be removing the Authorization header, which is common with A
 
 == Changelog ==
 
-= 1.9.0-beta4 =
-* Settings page: "Recommended Claude settings" under the connection steps (read-only tools: Always allow; write/delete tools: Always allow or Needs approval).
-
-= 1.9.0-beta3 =
-* New installs default to "Publish and edit live posts": each person's Claude can publish and update their own posts as far as their role allows (a Contributor's Claude still only writes drafts). Sites that already saved a mode keep it.
-* Readme: installation is now "install, share the connection URL"; the description covers per-user connections.
-
-= 1.9.0-beta2 =
-* Upload links: request-upload gives Claude a one-time page (valid 30 minutes) where the user drops their own image; it goes into the Media Library under their name at full size, and get-upload returns it. No settings; needs a role that can upload files.
-* Claude is told to use free stock photo URLs for generic images instead of generating an image and sending it as base64, and to use an upload link for the user's own images.
-
-= 1.9.0-beta1 =
-* Staff connect Claude with their own WordPress accounts: posts Claude writes are credited to and owned by the person who connected it. No AI Agent user or administrator approval needed; anyone who can write posts can connect (filter agent_publisher_can_connect to limit it).
-* Through a connection, a person's capabilities are capped to the AI Agent's (own posts only, no settings, no unfiltered HTML) and never exceed their own role: publishing needs both the site mode and the person's own publish right.
-* Connector sign-in (OAuth) is on by default for new installs.
-* Administrators can still connect Claude as an AI Agent user ("Credit posts to"). The activity log shows "(via Claude)".
+= 1.9.0 =
+* Staff connect Claude with their own WordPress accounts: posts Claude writes are credited to and owned by the person who connected it. No AI Agent user or administrator approval needed; anyone who can write posts can connect (filter agent_publisher_can_connect to limit it). Administrators can still credit an AI Agent user instead.
+* Through a connection, a person's capabilities are capped to the AI Agent's (own posts only, no settings, no unfiltered HTML) and never exceed their own role: a Contributor's Claude writes drafts; publishing needs both the site mode and the person's own publish right.
+* Upload links: request-upload gives the user a one-time page (valid 30 minutes) to drop their own image into the Media Library at full size; get-upload returns it to Claude. Needs a role that can upload files.
+* Claude is told to use free stock photo URLs for generic images instead of generating images and sending them as base64.
+* New installs: connector sign-in (OAuth) is on and the mode is "Publish and edit live posts". Sites with saved settings keep them.
+* Settings page: "Recommended Claude settings" for the connector's tool permissions. Activity log marks actions "(via Claude)".
 
 = 1.8.0 =
 * Featured images under the minimum width are refused when publishing or replacing a live post's image, by default (Settings > Agent Publisher > Images; untick to allow them with a warning).
@@ -215,6 +206,9 @@ Your web server may be removing the Authorization header, which is common with A
 * First release: list terms, get post, create draft post, update draft post and upload media abilities, plus the AI Agent (drafts only) role.
 
 == Upgrade Notice ==
+
+= 1.9.0 =
+Staff can now connect Claude with their own WordPress accounts, and posts are credited to them. Existing AI Agent connections keep working, and your saved settings are kept.
 
 = 1.8.0 =
 Agents can no longer publish with featured images under 1,200 px wide (or your site's minimum) unless you allow it under Settings > Agent Publisher > Images.
