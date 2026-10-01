@@ -189,7 +189,19 @@ final class Agent_Publisher_Settings_Page {
 						<th scope="row"><label for="agent-publisher-image-min-width"><?php esc_html_e( 'Minimum width', 'acadium-agent-publisher' ); ?></label></th>
 						<td>
 							<input type="number" min="0" max="10000" step="1" class="small-text" id="agent-publisher-image-min-width" name="<?php echo esc_attr( $name ); ?>[image_min_width]" value="<?php echo esc_attr( $s['image_min_width'] ); ?>" /> px
-							<p class="description"><?php esc_html_e( 'Featured images narrower than this get a warning (0 = no minimum). For sharp images on high-resolution screens, about twice the widest size your theme shows them at, e.g. 2400.', 'acadium-agent-publisher' ); ?></p>
+							<p class="description">
+								<?php
+								printf(
+									/* translators: %d: default minimum width in pixels. */
+									esc_html__( 'Featured images narrower than this get a warning. 0 uses the default, %d px. For sharp images on high-resolution screens, use about twice the widest size your theme shows them at, e.g. 2400.', 'acadium-agent-publisher' ),
+									(int) Agent_Publisher_Policy::DEFAULT_MIN_IMAGE_WIDTH
+								);
+								?>
+							</p>
+							<label style="display:block;margin-top:.5em;">
+								<input type="checkbox" name="<?php echo esc_attr( $name ); ?>[image_block_small]" value="1" <?php checked( $s['image_block_small'] ); ?> />
+								<?php esc_html_e( 'Don\'t let agents publish with a featured image narrower than this', 'acadium-agent-publisher' ); ?>
+							</label>
 						</td>
 					</tr>
 					<tr>
@@ -204,7 +216,7 @@ final class Agent_Publisher_Settings_Page {
 						<td>
 							<label>
 								<input type="checkbox" name="<?php echo esc_attr( $name ); ?>[image_checks_strict]" value="1" <?php checked( $s['image_checks_strict'] ); ?> />
-								<?php esc_html_e( 'Don\'t let agents publish with a featured image that gets a warning', 'acadium-agent-publisher' ); ?>
+								<?php esc_html_e( 'Don\'t let agents publish with a featured image that gets any warning (including the wrong shape)', 'acadium-agent-publisher' ); ?>
 							</label>
 						</td>
 					</tr>

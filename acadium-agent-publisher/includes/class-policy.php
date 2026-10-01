@@ -68,6 +68,7 @@ final class Agent_Publisher_Policy {
 			'image_aspect_ratios'    => '',
 			'image_guidance'         => '',
 			'image_checks_strict'    => false,
+			'image_block_small'      => true,
 		);
 	}
 
@@ -91,7 +92,33 @@ final class Agent_Publisher_Policy {
 			'image_aspect_ratios'    => self::sanitize_ratios( $input['image_aspect_ratios'] ?? '' ),
 			'image_guidance'         => mb_substr( sanitize_textarea_field( (string) ( $input['image_guidance'] ?? '' ) ), 0, 2000 ),
 			'image_checks_strict'    => ! empty( $input['image_checks_strict'] ),
+			'image_block_small'      => ! empty( $input['image_block_small'] ),
 		);
+	}
+
+	/** Used when the site sets no minimum width: smaller featured images look soft in most themes. */
+	const DEFAULT_MIN_IMAGE_WIDTH = 1200;
+
+	/** The minimum featured image width: the site's setting, or the built-in default. */
+	public static function min_image_width() {
+		$set = (int) self::settings()['image_min_width'];
+		return $set ? $set : self::DEFAULT_MIN_IMAGE_WIDTH;
+	}
+
+	/**
+	 * Width to aim for: the site's minimum if set, otherwise the largest size
+	 * WordPress generates (at least 1600, at most 2560).
+	 */
+	public static function recommended_image_width() {
+		$set = (int) self::settings()['image_min_width'];
+		if ( $set ) {
+			return $set;
+		}
+		$widest = 0;
+		foreach ( wp_get_registered_image_subsizes() as $size ) {
+			$widest = max( $widest, (int) $size['width'] );
+		}
+		return max( 1600, min( 2560, $widest ) );
 	}
 
 	/** "2:1, 3/2, 16x9" -> "2:1, 3:2, 16:9" (at most 6). */
@@ -133,8 +160,14 @@ final class Agent_Publisher_Policy {
 			return array();
 		}
 		$out = array();
-		if ( $s['image_min_width'] && $w < $s['image_min_width'] ) {
-			$out[] = sprintf( 'the featured image is %1$dx%2$d px; this site asks for at least %3$d px wide', $w, $h, $s['image_min_width'] );
+		$min = self::min_image_width();
+		if ( $w < $min ) {
+			$out[] = $s['image_min_width']
+				? sprintf( 'the featured image is %1$dx%2$d px; this site asks for at least %3$d px wide', $w, $h, $min )
+				: sprintf( 'the featured image is %1$dx%2$d px, too small to look sharp as a featured image (at least %3$d px wide; aim for about %4$d)', $w, $h, $min, self::recommended_image_width() );
+			if ( 'base64' === get_post_meta( (int) $attachment_id, '_agent_publisher_source', true ) ) {
+				$out[] = 'it was sent as data_base64: never reduce an image\'s resolution to fit through base64; ask the user to upload the full-size image in WordPress (Media > Add New), then use find-media';
+			}
 		}
 		$ratios = self::aspect_ratios();
 		if ( $ratios ) {
@@ -168,6 +201,26 @@ final class Agent_Publisher_Policy {
 		return $user && $user->exists()
 			&& array( self::ROLE ) === array_values( (array) $user->roles )
 			&& ! user_can( $user, 'manage_options' );
+	}
+
+	/**
+	 * Image warnings that block publishing (or replacing a live post's image):
+	 * all of them in strict mode, otherwise only "too small" when the site
+	 * refuses small featured images (the default).
+	 *
+	 * @return string[]
+	 */
+	public static function image_problems( $attachment_id ) {
+		$s        = self::settings();
+		$warnings = self::image_warnings( $attachment_id );
+		if ( $s['image_checks_strict'] || ! $warnings ) {
+			return $warnings;
+		}
+		if ( ! $s['image_block_small'] ) {
+			return array();
+		}
+		$meta = wp_get_attachment_metadata( (int) $attachment_id );
+		return (int) ( $meta['width'] ?? 0 ) < self::min_image_width() ? $warnings : array();
 	}
 
 	/** True if the site's mode is at least $mode. */
@@ -229,10 +282,13 @@ final class Agent_Publisher_Policy {
 			}
 		}
 
-		// Strict image checks: the image warnings (size, shape) block publishing.
-		if ( $s['image_checks_strict'] && get_post_thumbnail_id( $post ) ) {
-			foreach ( self::image_warnings( get_post_thumbnail_id( $post ) ) as $warning ) {
-				$problems[] = $warning;
+		// Image checks: strict mode makes every image warning block publishing;
+		// by default, a featured image below the minimum width blocks it too.
+		$thumb = (int) get_post_thumbnail_id( $post );
+		if ( $thumb ) {
+			$image_problems = self::image_problems( $thumb );
+			foreach ( $image_problems as $problem ) {
+				$problems[] = $problem;
 			}
 		}
 

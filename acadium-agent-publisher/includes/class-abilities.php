@@ -205,7 +205,7 @@ final class Agent_Publisher_Abilities {
 
 		$image_source = array(
 			'url'         => array( 'type' => 'string', 'description' => 'Public https URL of the image. Provide url OR data_base64.' ),
-			'data_base64' => array( 'type' => 'string', 'description' => 'Base64-encoded image bytes. Requires filename. Only practical for small images (under about 100 KB); for larger ones use url, or find-media for images the user uploaded. Whitespace and line breaks are ignored.' ),
+			'data_base64' => array( 'type' => 'string', 'description' => 'Base64-encoded image bytes. Requires filename. Only practical for small files (under about 100 KB); for larger ones use url, or find-media for images the user uploaded. Never reduce an image\'s resolution to make it fit here: a featured image needs to be at least the width in get-capabilities > images. Whitespace and line breaks are ignored.' ),
 			'sha256'      => array( 'type' => 'string', 'description' => 'Optional SHA-256 (hex) of the image file. If given, the upload is refused unless the received bytes match, so a copying mistake can\'t save a corrupted image.' ),
 			'filename'    => array( 'type' => 'string', 'description' => 'File name with extension, e.g. hero.jpg.' ),
 			'alt_text'    => array( 'type' => 'string', 'description' => 'Describe the image for screen readers. Required.' ),
@@ -215,7 +215,7 @@ final class Agent_Publisher_Abilities {
 
 		$featured_image = array(
 			'type'                 => 'object',
-			'description'          => 'Uploads an image and makes it the featured image. Use this or featured_media, not both. For an image already in the Media Library (e.g. one the user uploaded), pass its id as featured_media instead (see find-media).',
+			'description'          => 'Uploads an image and makes it the featured image. Use this or featured_media, not both. It must be at least the width in get-capabilities > images (recommended_width to look sharp); smaller images are refused when publishing unless the site allows them. Never shrink an image to fit through data_base64: ask the user to upload the full-size image (Media > Add New) and pass its id as featured_media (see find-media).',
 			'properties'           => $image_source,
 			'required'             => array( 'alt_text' ),
 			'additionalProperties' => false,
@@ -566,15 +566,18 @@ final class Agent_Publisher_Abilities {
 				'strict_image_checks'    => (bool) $s['image_checks_strict'],
 			),
 			'images'     => array(
-				'how_to_add'           => 'Prefer a public https url, or find-media for images the user uploaded to the Media Library (the way to use large images). data_base64 is only practical for small images (under about 100 KB); pass sha256 of the file to verify it arrived intact.',
+				'how_to_add'           => 'Prefer a public https url, or find-media for images the user uploaded to the Media Library (the way to use large images). data_base64 is only practical for small images (under about 100 KB); pass sha256 of the file to verify it arrived intact. Never reduce an image\'s resolution to make it fit through data_base64: if a full-size image is too large to send, ask the user to upload it (Media > Add New) and use find-media.',
 				'accepted_types'       => array_values( self::upload_mimes() ),
 				'max_upload_bytes'     => self::max_upload(),
 				'scaled_down_above_px' => (int) apply_filters( 'big_image_size_threshold', 2560, array( 0, 0 ), '', 0 ), // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core filter.
 				'generated_sizes'      => wp_get_registered_image_subsizes(),
 				'featured_image'       => array(
-					'min_width'     => (int) $s['image_min_width'],
-					'aspect_ratios' => array_keys( Agent_Publisher_Policy::aspect_ratios() ),
-					'guidance'      => $s['image_guidance'],
+					'min_width'         => Agent_Publisher_Policy::min_image_width(),
+					'min_width_source'  => $s['image_min_width'] ? 'site setting' : 'default',
+					'recommended_width' => Agent_Publisher_Policy::recommended_image_width(),
+					'small_blocks_publishing' => $s['image_checks_strict'] || $s['image_block_small'],
+					'aspect_ratios'     => array_keys( Agent_Publisher_Policy::aspect_ratios() ),
+					'guidance'          => $s['image_guidance'],
 				),
 			),
 			'user'       => array(
@@ -855,10 +858,10 @@ final class Agent_Publisher_Abilities {
 		if ( is_wp_error( $uploaded ) ) {
 			return $uploaded;
 		}
-		// A live post's new featured image must pass strict image checks, like a newly published one.
+		// A live post's new featured image must pass the same image checks as a newly published one.
 		$new_image = $uploaded ? $uploaded : (int) ( $input['featured_media'] ?? 0 );
-		if ( $new_image && Agent_Publisher_Policy::settings()['image_checks_strict'] ) {
-			$problems = Agent_Publisher_Policy::image_warnings( $new_image );
+		if ( $new_image ) {
+			$problems = Agent_Publisher_Policy::image_problems( $new_image );
 			if ( $problems ) {
 				if ( $uploaded ) {
 					wp_delete_attachment( $uploaded, true );
@@ -1100,6 +1103,8 @@ final class Agent_Publisher_Abilities {
 		}
 
 		update_post_meta( $id, '_wp_attachment_image_alt', sanitize_text_field( $input['alt_text'] ) );
+		// Lets image_warnings() tell an agent that shrank an image to fit base64 to ask for an upload instead.
+		update_post_meta( $id, '_agent_publisher_source', ! empty( $input['url'] ) ? 'url' : 'base64' );
 
 		return (int) $id;
 	}

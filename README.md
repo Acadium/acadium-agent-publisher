@@ -129,7 +129,12 @@ Getting images from Claude into WordPress:
 - **Images on the web:** Claude can pass a public `https` URL; the site downloads it.
 - **Small images Claude has as a file:** `data_base64`. A tool call can only carry text Claude writes out, so this is only practical up to roughly 100 KB. Whitespace, `data:` prefixes, URL-safe characters and missing padding are accepted; errors say exactly what's wrong (e.g. the position of an invalid character), and an optional `sha256` makes the upload fail instead of saving a corrupted image.
 
-**Image guidance** (Settings → Agent Publisher → Images): set the minimum width, the aspect ratios your theme crops featured images to, and free-text guidance. `get-capabilities` passes this to Claude before it picks an image; images that don't fit get `image_warnings` in the result. Turn on **Strict** to refuse publishing (and replacing a live post's image) with an image that gets a warning. Guidance about crops done in your theme's CSS has to come from these settings: the plugin can report the sizes WordPress generates, but not how the theme crops them on the page.
+**Image guidance** (Settings → Agent Publisher → Images): set the minimum width, the aspect ratios your theme crops featured images to, and free-text guidance. `get-capabilities` passes this to Claude before it picks an image, with a `recommended_width` to aim for; images that don't fit get `image_warnings` in the result.
+
+- **Built-in minimum:** with no minimum set, featured images under **1,200 px** wide get a "too small to look sharp" warning, and the recommended width is the largest size WordPress generates (at least 1,600 px).
+- **Small images are refused by default:** publishing (or replacing a live post's image) with a featured image under the minimum is refused. Untick *Don't let agents publish with a featured image narrower than this* to allow it with a warning.
+- **Strict** refuses every image warning, including the wrong shape.
+- **No shrinking to fit:** Claude is told never to reduce an image's resolution to fit through base64, and a small image that arrived as base64 gets a warning saying so, with the upload route to use instead. Guidance about crops done in your theme's CSS has to come from these settings: the plugin can report the sizes WordPress generates, but not how the theme crops them on the page.
 
 ## Safety model
 

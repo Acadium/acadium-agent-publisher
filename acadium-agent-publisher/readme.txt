@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.7.0
+Stable tag: 1.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -136,6 +136,11 @@ Your web server may be removing the Authorization header, which is common with A
 
 == Changelog ==
 
+= 1.8.0 =
+* Featured images under the minimum width are refused when publishing or replacing a live post's image, by default (Settings > Agent Publisher > Images; untick to allow them with a warning).
+* Built-in minimum of 1,200 px when the site sets none, and a recommended width (the largest size WordPress generates) in get-capabilities, so agents always have a target.
+* Agents are told never to reduce an image's resolution to fit it through base64, and a small image sent as base64 gets a warning pointing to the upload route (Media > Add New, then find-media).
+
 = 1.7.0 =
 * New find-media tool: Claude finds images in the Media Library by title or file name. For large images, upload them in WordPress and ask Claude to use them.
 * Image guidance under Settings > Agent Publisher > Images: minimum width, the aspect ratios your theme crops featured images to, and guidance for agents. get-capabilities reports it along with accepted types, the size limit and the sizes WordPress generates. Images that don't fit get warnings in the result; "Strict" refuses to publish with them.
@@ -193,6 +198,9 @@ Your web server may be removing the Authorization header, which is common with A
 * First release: list terms, get post, create draft post, update draft post and upload media abilities, plus the AI Agent (drafts only) role.
 
 == Upgrade Notice ==
+
+= 1.8.0 =
+Agents can no longer publish with featured images under 1,200 px wide (or your site's minimum) unless you allow it under Settings > Agent Publisher > Images.
 
 = 1.7.0 =
 Adds image guidance and checks, a find-media tool for images you upload yourself, and one-step featured image replacement on live posts.
