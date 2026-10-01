@@ -470,6 +470,15 @@ final class Agent_Publisher_Setup {
 						<li><?php esc_html_e( 'Check what Claude may do and click Allow.', 'acadium-agent-publisher' ); ?></li>
 					</ol>
 					<p class="description"><?php esc_html_e( 'Share these steps and the connection URL with your staff. In a chat, turn the connector on from the tools menu. On Claude Team and Enterprise plans, an owner may need to allow custom connectors first.', 'acadium-agent-publisher' ); ?></p>
+					<div class="notice notice-info inline" style="max-width:60em;">
+						<p><strong><?php esc_html_e( 'Recommended Claude settings', 'acadium-agent-publisher' ); ?></strong></p>
+						<p><?php esc_html_e( 'Claude asks before it uses a connector\'s tools. Each person can change that in Claude: Settings > Connectors > this site > tool permissions.', 'acadium-agent-publisher' ); ?></p>
+						<ul style="list-style:disc;margin-left:1.5em;">
+							<li><?php esc_html_e( 'Read-only tools: Always allow. They only look things up (site rules, categories, posts, images).', 'acadium-agent-publisher' ); ?></li>
+							<li><?php esc_html_e( 'Write/delete tools: Always allow, so Claude can write and publish without asking each time; or keep Needs approval to confirm each change before it happens.', 'acadium-agent-publisher' ); ?></li>
+						</ul>
+						<p class="description"><?php esc_html_e( 'These are Claude settings, so this site can\'t set them for you. Claude may reset them to "Needs approval" after an app update.', 'acadium-agent-publisher' ); ?></p>
+					</div>
 				<?php endif; ?>
 				<?php self::render_extension( $agents ); ?>
 			</li>

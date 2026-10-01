@@ -67,7 +67,12 @@ Then in WordPress, open **Posts → Drafts**. The draft is there, with *Claude* 
 
 In *Publish* mode, Claude writes and publishes a post, featured image included, in a single step, so you approve it once.
 
-**Fewer approval prompts.** Claude Desktop asks before each tool that changes something; that's a Claude Desktop setting, not something a site can switch off. In Claude Desktop's settings, open the connector's tool permissions and set the read-only tools (`get-capabilities`, `list-terms`, `get-post`) to **Always allow**. Keep the tools that write or publish on approval: that approval is your chance to check a post before it goes live.
+**Recommended Claude settings.** Claude asks before it uses a connector's tools. Each person can change that in Claude under **Settings → Connectors → the site → tool permissions** (the settings page shows the same advice):
+
+- **Read-only tools → Always allow.** They only look things up: `get-capabilities`, `list-terms`, `get-post`, `find-media`, `get-upload`.
+- **Write/delete tools → Always allow** to let Claude write and publish without asking each time, or keep **Needs approval** to confirm each change before it happens.
+
+These are Claude settings, so a site can't set them, and Claude may reset them to "Needs approval" after an app update.
 
 ### Step 5: Keep an eye on it
 

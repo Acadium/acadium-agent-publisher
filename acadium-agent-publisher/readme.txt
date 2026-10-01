@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.9.0-beta3
+Stable tag: 1.9.0-beta4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -135,6 +135,9 @@ Check that "Allow OAuth connections" is on and that `https://your-site/.well-kno
 Your web server may be removing the Authorization header, which is common with Apache and CGI/FastCGI. Add `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1` to your .htaccess, and make sure security plugins allow Application Passwords and REST API access for logged-in users.
 
 == Changelog ==
+
+= 1.9.0-beta4 =
+* Settings page: "Recommended Claude settings" under the connection steps (read-only tools: Always allow; write/delete tools: Always allow or Needs approval).
 
 = 1.9.0-beta3 =
 * New installs default to "Publish and edit live posts": each person's Claude can publish and update their own posts as far as their role allows (a Contributor's Claude still only writes drafts). Sites that already saved a mode keep it.
