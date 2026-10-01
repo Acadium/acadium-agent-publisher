@@ -59,7 +59,9 @@ final class Agent_Publisher_Policy {
 
 	public static function defaults() {
 		return array(
-			'mode'                   => 'drafts',
+			// Publishing is the point of the plugin. Each person's Claude is still
+			// limited to their own posts and their own role (Contributors: drafts).
+			'mode'                   => 'publish_edit',
 			'require_featured_image' => false,
 			'allowed_categories'     => array(),
 			'daily_limit'            => 0,
@@ -79,12 +81,12 @@ final class Agent_Publisher_Policy {
 
 	public static function sanitize( $input ) {
 		$input = is_array( $input ) ? $input : array();
-		$mode  = isset( $input['mode'] ) ? sanitize_key( $input['mode'] ) : 'drafts';
+		$mode  = isset( $input['mode'] ) ? sanitize_key( $input['mode'] ) : self::defaults()['mode'];
 		$cats  = array_values( array_filter( array_map( 'absint', (array) ( $input['allowed_categories'] ?? array() ) ), function ( $id ) {
 			return $id && term_exists( $id, 'category' );
 		} ) );
 		return array(
-			'mode'                   => in_array( $mode, self::MODES, true ) ? $mode : 'drafts',
+			'mode'                   => in_array( $mode, self::MODES, true ) ? $mode : self::defaults()['mode'],
 			'require_featured_image' => ! empty( $input['require_featured_image'] ),
 			'allowed_categories'     => $cats,
 			'daily_limit'            => min( 1000, absint( $input['daily_limit'] ?? 0 ) ),

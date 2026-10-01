@@ -4,7 +4,7 @@ Tags: ai, mcp, claude, abilities, content
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.9.0-beta2
+Stable tag: 1.9.0-beta3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,12 +14,14 @@ Let Claude and other AI agents draft, review and publish posts, upload images an
 
 Acadium Agent Publisher lets an AI agent, such as Claude, write and publish blog posts for your site through the WordPress Abilities API and the Model Context Protocol (MCP). The official MCP Adapter library is built in, so there is nothing else to install.
 
-The agent signs in as its own WordPress user with an Application Password, and that user gets the **AI Agent** role that this plugin adds. Under **Settings > Agent Publisher** you decide how far the agent may go:
+Your staff connect Claude with **their own WordPress accounts**: the posts Claude writes are credited to and owned by the person who connected it. Claude works with limited permissions, never more than that person's own role: their own posts only, no settings, no other people's posts. Under **Settings > Agent Publisher** you decide how far Claude may go:
 
-* **Drafts only** (default): the agent creates and edits its own drafts, and a person publishes them.
-* **Submit for review**: the agent can also move its drafts to "Pending review" for an editor.
-* **Publish**: the agent can also publish or schedule its own posts, after the checks you set, and unpublish them again.
-* **Publish and edit live posts**: the agent can also change its own posts after they are live.
+* **Drafts only**: Claude creates and edits drafts, and a person publishes them.
+* **Submit for review**: Claude can also move drafts to "Pending review" for an editor.
+* **Publish**: Claude can also publish or schedule posts, after the checks you set, and unpublish them again.
+* **Publish and edit live posts** (default): Claude can also change posts after they are live.
+
+Each person's role still applies: a Contributor's Claude can only write drafts and submit them for review, in any mode.
 
 Checks before an agent publishes:
 
@@ -50,7 +52,7 @@ When you connect, an administrator logs in to WordPress and approves the connect
   * Access tokens expire after an hour, and refresh tokens are single-use.
   * Tokens are stored only as hashes, and they work only for the MCP and Abilities API routes.
 
-Publishing can trigger things that unpublishing cannot undo, such as subscriber emails or social media posts from other plugins. Start with "Drafts only".
+Publishing can trigger things that unpublishing cannot undo, such as subscriber emails or social media posts from other plugins. Choose a stricter mode if posts should be reviewed by someone else before they go live.
 
 = Abilities =
 
@@ -83,16 +85,12 @@ Development happens on GitHub: https://github.com/Acadium/acadium-agent-publishe
 
 == Installation ==
 
-1. Under Settings > Permalinks, choose any structure except "Plain" (for example "Post name"). The plugin offers a one-click button if you forget.
-2. Install and activate Acadium Agent Publisher. This adds the **AI Agent** role.
-3. Go to Users > Add New User and create a user for the agent (for example `claude`) with the role **AI Agent**. Do not give the agent the Author, Editor or Administrator role.
-4. Edit that user and create an Application Password under "Application Passwords". Copy it; it is shown once.
-5. Choose what the agent may do under Settings > Agent Publisher (default: Drafts only).
-6. Connect your AI client, either way:
-   * **claude.ai (web, desktop, mobile):** turn on "Allow OAuth connections" under Settings > Agent Publisher. In claude.ai, go to Settings > Connectors > Add custom connector and enter `https://your-site/wp-json/acadium-agent-publisher/mcp`. Log in to WordPress as an administrator when asked, choose the AI Agent user and click Allow. You can skip step 4.
-   * **Claude Desktop or Claude Code with an Application Password:** point the client at `https://your-site/wp-json/acadium-agent-publisher/mcp` with the agent's username and Application Password. The GitHub README has ready-to-paste configurations.
+1. Install and activate Acadium Agent Publisher. If the site uses "Plain" permalinks, click the one-click "Post name" button the plugin shows.
+2. Under Settings > Agent Publisher, copy the connection URL and share it with your staff. Nothing else to set up.
+3. Each person adds the site in Claude (Claude Desktop, claude.ai or the Claude mobile app): Settings > Connectors > Add custom connector, paste the connection URL, click Connect, log in with their own WordPress account and click Allow.
+4. Optionally, choose what Claude may do under Settings > Agent Publisher (default: Publish and edit live posts) and set image guidance.
 
-Your site must use HTTPS (WordPress disables Application Passwords on plain HTTP).
+Your site must use HTTPS. Sites the connector can't reach (for example WordPress in a subfolder) can use the Claude Desktop extension with an Application Password instead; see "Can't use the connector?" on the settings page.
 
 == Frequently Asked Questions ==
 
@@ -137,6 +135,10 @@ Check that "Allow OAuth connections" is on and that `https://your-site/.well-kno
 Your web server may be removing the Authorization header, which is common with Apache and CGI/FastCGI. Add `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1` to your .htaccess, and make sure security plugins allow Application Passwords and REST API access for logged-in users.
 
 == Changelog ==
+
+= 1.9.0-beta3 =
+* New installs default to "Publish and edit live posts": each person's Claude can publish and update their own posts as far as their role allows (a Contributor's Claude still only writes drafts). Sites that already saved a mode keep it.
+* Readme: installation is now "install, share the connection URL"; the description covers per-user connections.
 
 = 1.9.0-beta2 =
 * Upload links: request-upload gives Claude a one-time page (valid 30 minutes) where the user drops their own image; it goes into the Media Library under their name at full size, and get-upload returns it. No settings; needs a role that can upload files.

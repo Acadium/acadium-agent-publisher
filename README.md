@@ -29,7 +29,7 @@ There's nothing to set up. Go to **Settings → Agent Publisher** and click **Co
 
 - **Everyone who can write posts** (Contributors and up) connects Claude with **their own WordPress account**. Posts Claude writes are **credited to them and owned by them**: they appear under their name and they can edit them in WordPress.
 - Claude gets **limited permissions**, never more than the person's own role: their own posts only, no settings, no other people's posts, scripts removed. A Contributor's Claude writes drafts; an Author's can publish when the site allows it.
-- The site rule starts at **Drafts only**: Claude writes drafts and each person reviews and publishes their own. Change it under **What agents may do** (see [Publishing modes](#publishing-modes)).
+- The site rule starts at **Publish and edit live posts**: each person's Claude can publish and update their own posts, as far as their role allows (a Contributor's Claude still only writes drafts). Choose a stricter rule under **What agents may do** if posts should be reviewed first (see [Publishing modes](#publishing-modes)).
 
 Below that, **Connection checks** tests the things that usually break connections (HTTPS, permalinks, the connection URL, the Authorization header, connector sign-in) and says how to fix anything that fails, with a one-click fix where possible.
 
@@ -88,10 +88,10 @@ Choose under **Settings > Agent Publisher**:
 
 | Mode | The agent can… |
 |---|---|
-| **Drafts only** (default) | create and edit its own drafts; a person publishes them |
+| **Drafts only** | create and edit its own drafts; a person publishes them |
 | **Submit for review** | also move its drafts to *Pending review* for an editor |
 | **Publish** | also publish or schedule its own posts (after the checks below) and unpublish them |
-| **Publish and edit live posts** | also change its own posts after they are live |
+| **Publish and edit live posts** (default) | also change its own posts after they are live |
 
 **Pre-publish checks:**
 - a title and content are always required
@@ -149,7 +149,7 @@ The agent signs in as its own WordPress user with an **Application Password**. A
 - Uploads are checked by their real content type (JPEG, PNG, GIF, WebP by default), capped at 10 MB, and URL uploads refuse private and local addresses.
 - References such as category IDs and featured images are validated before anything is written.
 
-Publishing can trigger things unpublishing can't undo, such as subscriber emails or social posts from other plugins. Start with *Drafts only*.
+Publishing can trigger things unpublishing can't undo, such as subscriber emails or social posts from other plugins. Choose a stricter mode if posts should be reviewed by someone else before they go live.
 
 ### OAuth (claude.ai connectors)
 

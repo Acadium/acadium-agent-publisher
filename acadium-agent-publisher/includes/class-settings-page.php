@@ -132,7 +132,7 @@ final class Agent_Publisher_Settings_Page {
 					<?php endforeach; ?>
 				</fieldset>
 				<div class="notice notice-warning inline">
-					<p><?php esc_html_e( 'Publishing can trigger things that cannot be undone, such as subscriber emails, social media posts and notifications from other plugins. Unpublishing a post does not recall them. Start with "Drafts only" and allow publishing only when you trust the agent\'s work.', 'acadium-agent-publisher' ); ?></p>
+					<p><?php esc_html_e( 'Publishing can trigger things that cannot be undone, such as subscriber emails, social media posts and notifications from other plugins. Unpublishing a post does not recall them. The default, "Publish and edit live posts", lets each person\'s Claude publish what their own role allows (Contributors still only write drafts). Choose a stricter mode if posts should be reviewed by someone else first.', 'acadium-agent-publisher' ); ?></p>
 				</div>
 
 				<h2><?php esc_html_e( 'Checks before an agent publishes', 'acadium-agent-publisher' ); ?></h2>

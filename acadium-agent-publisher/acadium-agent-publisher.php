@@ -3,7 +3,7 @@
  * Plugin Name:       Acadium Agent Publisher
  * Plugin URI:        https://github.com/Acadium/acadium-agent-publisher
  * Description:       Let Claude and other AI agents draft, review and publish posts, upload images and look up categories and tags, within rules you set. Works with the WordPress Abilities API and MCP clients such as Claude.
- * Version:           1.9.0-beta2
+ * Version:           1.9.0-beta3
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Acadium
@@ -14,16 +14,16 @@
  *
  * Lets AI agents (e.g. Claude over MCP) work on posts
  * through the WordPress Abilities API, within rules the site owner sets under
- * Settings > Agent Publisher: drafts only (default), submit for review,
- * publish, or publish and edit live posts. Optional OAuth lets claude.ai
- * (web, desktop and mobile) connect without an Application Password.
+ * Settings > Agent Publisher: drafts only, submit for review, publish, or
+ * publish and edit live posts (default). Staff connect Claude with their
+ * own WordPress accounts (OAuth); posts are credited to them.
  *
  * @package Acadium_Agent_Publisher
  */
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'AGENT_PUBLISHER_VERSION', '1.9.0-beta2' );
+define( 'AGENT_PUBLISHER_VERSION', '1.9.0-beta3' );
 define( 'AGENT_PUBLISHER_FILE', __FILE__ );
 define( 'AGENT_PUBLISHER_DIR', __DIR__ );
 

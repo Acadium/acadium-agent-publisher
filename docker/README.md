@@ -199,7 +199,7 @@ docker compose run --rm wpcli plugin list --fields=name,status,version
 
 **Choose what the agent may do** under **Settings → Agent Publisher**:
 
-- **Mode:** *Drafts only* (the default and recommended start), *Submit for review*, *Publish*, or *Publish and edit live posts*.
+- **Mode:** *Drafts only*, *Submit for review*, *Publish*, or *Publish and edit live posts* (the default).
 - **Checks before publishing:** featured image, allowed categories, daily limit.
 - **Allow OAuth connections:** turn this on to connect from claude.ai and the Claude mobile apps (step 4, Option A).
 
